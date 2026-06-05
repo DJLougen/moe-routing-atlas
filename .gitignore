@@ -128,6 +128,7 @@ atlas.db
 *.parquet
 exports/
 traces/
+!docs/screenshots/
 screenshots/
 skeleton_*/
 test_*.png
