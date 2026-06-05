@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MoE Routing Atlas — Architecture Lattice</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { overflow: hidden; background: #0a0a1a; font-family: 'Segoe UI', system-ui, sans-serif; color: #e0e0e0; }
+        #canvas { display: block; width: 100vw; height: 100vh; }
+
+        #ui {
+            position: absolute; top: 14px; left: 14px; width: 300px;
+            max-height: calc(100vh - 28px); overflow-y: auto;
+            background: rgba(10,10,26,0.92); border: 1px solid #2a2a4e;
+            border-radius: 10px; padding: 14px; font-size: 11px;
+        }
+        h1 { font-size: 15px; color: #0ff; margin-bottom: 2px; }
+        .subtitle { font-size: 9px; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+
+        .trace-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 3px; max-height: 120px; overflow-y: auto; }
+        .trace-chip { background: #12122a; border: 1px solid #2a2a4e; border-radius: 3px; padding: 3px 4px; cursor: pointer; font-size: 9px; text-align: center; transition: all 0.15s; }
+        .trace-chip:hover { border-color: #0ff; background: #1a1a3a; }
+        .trace-chip.active { border-color: #0ff; background: #002244; }
+
+        .token-row { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; }
+        .tok { padding: 2px 5px; background: #181830; border-radius: 3px; font-family: monospace; font-size: 10px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+        .tok:hover { border-color: #4af; }
+        .tok.active { border-color: #0ff; color: #0ff; background: #002244; }
+
+        .btn-row { display: flex; gap: 4px; margin: 6px 0; }
+        button { flex: 1; background: #0088aa; border: none; padding: 5px; border-radius: 4px; color: #fff; font-weight: 700; font-size: 10px; cursor: pointer; transition: background 0.15s; }
+        button:hover { background: #00bbdd; }
+        button.off { background: #1a1a30; color: #666; }
+
+        .info { margin-top: 6px; padding: 6px; background: #0c0c20; border-radius: 4px; font-size: 10px; line-height: 1.5; border-left: 2px solid #0ff; }
+        .info .label { color: #888; }
+        .info .hl { color: #ff9800; font-weight: 600; }
+
+        .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 9px; color: #888; }
+        .legend-item { display: flex; align-items: center; gap: 3px; }
+        .dot { width: 7px; height: 7px; border-radius: 2px; }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    <div id="ui">
+        <h1>MoE Routing Atlas</h1>
+        <div class="subtitle">Architecture Lattice</div>
+        <div class="trace-grid" id="traces"></div>
+        <div id="controls" style="display:none">
+            <div class="btn-row">
+                <button id="play">Play</button>
+                <button id="pause" class="off">Pause</button>
+                <button id="reset" class="off">Reset</button>
+                <button id="rotate" class="off">Rotate</button>
+            </div>
+            <div class="token-row" id="tokens"></div>
+            <div class="info" id="info"></div>
+            <div class="legend">
+                <div class="legend-item"><div class="dot" style="background:#4fc3f7"></div>Attention</div>
+                <div class="legend-item"><div class="dot" style="background:#555"></div>Norm</div>
+                <div class="legend-item"><div class="dot" style="background:#0ff"></div>Router</div>
+                <div class="legend-item"><div class="dot" style="background:#2a4a6a"></div>Expert</div>
+                <div class="legend-item"><div class="dot" style="background:#ff9800"></div>Active</div>
+                <div class="legend-item"><div class="dot" style="background:#ff5555"></div>Skip</div>
+                <div class="legend-item"><div class="dot" style="background:#44ff88"></div>Flow</div>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        const canvas = document.getElementById('canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.setClearColor(0x0a0a1a);
+
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.005);
+
+        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 400);
+        camera.position.set(60, 45, -40);
+
+        // Post-processing setup for bloom effect
+        const composer = new EffectComposer(renderer);
+        const renderPass = new RenderPass(scene, camera);
+        composer.addPass(renderPass);
+
+        const bloomPass = new UnrealBloomPass(
+            new THREE.Vector2(window.innerWidth, window.innerHeight),
+            1.0,  // strength
+            0.4,  // radius
+            0.85  // threshold
+        );
+        composer.addPass(bloomPass);
+
+        const controls = new OrbitControls(camera, canvas);
+        controls.enableDamping = true;
+        controls.autoRotate = false;
+        controls.autoRotateSpeed = 0.4;
+        controls.target.set(0, 10, 55);
+
+        // ── Lighting (much brighter) ──
+        scene.add(new THREE.AmbientLight(0xccccee, 0.8));
+        
+        // 3-point lighting for depth and visual richness
+        const keyLight = new THREE.DirectionalLight(0xffe8d0, 1.2);
+        keyLight.position.set(50, 80, 30);
+        scene.add(keyLight);
+        
+        const fillLight = new THREE.DirectionalLight(0x4080ff, 0.6);
+        fillLight.position.set(-40, 20, -30);
+        scene.add(fillLight);
+        
+        const rimLight = new THREE.DirectionalLight(0x00f5ff, 0.8);
+        rimLight.position.set(0, -20, 60);
+        scene.add(rimLight);
+
+        const hemi = new THREE.HemisphereLight(0x88aaff, 0x443322, 0.5);
+        scene.add(hemi);
+
+        const dl1 = new THREE.DirectionalLight(0xffffff, 1.0);
+        dl1.position.set(30, 60, 40);
+        scene.add(dl1);
+
+        const dl2 = new THREE.DirectionalLight(0xffcc88, 0.4);
+        dl2.position.set(-25, 40, -20);
+        scene.add(dl2);
+
+        const dl3 = new THREE.DirectionalLight(0x88aaff, 0.3);
+        dl3.position.set(0, -20, 30);
+        scene.add(dl3);
+
+        // ── State ──
+        let traceData = null, currentToken = 0, isPlaying = false, tick = 0, animSpeed = 1;
+
+        // ── Palette ──
+        const C_ATTN  = new THREE.Color(0x4fc3f7);
+        const C_NORM  = new THREE.Color(0x555566);
+        const C_ROUT  = new THREE.Color(0x00d4ff);
+        const C_EXPT  = new THREE.Color(0x2a4a6a);
+        const C_DIM   = new THREE.Color(0x111122);
+        const C_ACTV  = new THREE.Color(0xff9800);
+        const C_HOT   = new THREE.Color(0xffeb3b);
+        const C_BEAM  = new THREE.Color(0x0088aa);
+        const C_FLOW  = new THREE.Color(0x44ff88);
+
+        // ── Mesh refs ──
+        let expertsInst = null, routInst = null;
+        let beamMesh = null, crossMesh = null, pulsePts = null;
+
+        const dummy = new THREE.Object3D();
+
+        const COLS = 10, ROWS = 6, GAP = 1.6, LAYER_GAP = 5.5, Y0 = 2;
+
+        function layerY(l) { return Y0 + 8; }
+        function layerZ(l) { return l * LAYER_GAP; }
+
+        function buildArchitecture(L, K, topK) {
+            [expertsInst, routInst, beamMesh, crossMesh, pulsePts].forEach(m => {
+                if (m) { scene.remove(m); m.geometry?.dispose?.(); m.material?.dispose?.(); }
+            });
+
+            const eK = Math.min(K, 60);
+
+            // ── Experts: small cubes in a 10x6 grid ──
+            const eGeo = new THREE.IcosahedronGeometry(0.4, 1);
+            const eMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.4, roughness: 0.5, emissive: new THREE.Color(0x111118), emissiveIntensity: 0.5 });
+            expertsInst = new THREE.InstancedMesh(eGeo, eMat, L * eK);
+            for (let l = 0; l < L; l++) {
+                for (let e = 0; e < eK; e++) {
+                    const row = Math.floor(e / COLS);
+                    const col = e % COLS;
+                    dummy.position.set(
+                        (col - COLS/2 + 0.5) * GAP,
+                        Y0 + 3 + (row - ROWS/2 + 0.5) * GAP,
+                        layerZ(l)
+                    );
+                    dummy.scale.set(1,1,1);
+                    dummy.rotation.set(0,0,0);
+                    dummy.updateMatrix();
+                    expertsInst.setMatrixAt(l * eK + e, dummy.matrix);
+                    expertsInst.setColorAt(l * eK + e, C_DIM);
+                }
+            }
+            expertsInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+            scene.add(expertsInst);
+
+
+
+            // ── Routers: small dodecahedrons (not big balls!) ──
+            const rGeo = new THREE.DodecahedronGeometry(0.45, 0);
+            const rMat = new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 0.0, roughness: 1.0 });
+            routInst = new THREE.InstancedMesh(rGeo, rMat, L);
+            for (let l = 0; l < L; l++) {
+                dummy.position.set(-0.3, Y0 + 8, layerZ(l));
+                dummy.scale.set(1,1,1);
+                dummy.rotation.set(0,0,0);
+                dummy.updateMatrix();
+                routInst.setMatrixAt(l, dummy.matrix);
+                routInst.setColorAt(l, new THREE.Color(0x111111));
+            }
+            scene.add(routInst);
+
+            // ── Static backbone lines (Attn→Norm→Router) ──
+            const staticPts = [];
+            for (let l = 0; l < L; l++) {
+                const z = layerZ(l), y = Y0 + 8;
+                // Attn → Norm
+                staticPts.push(-8, y, z, -4, y, z);
+                // Norm → Router
+                staticPts.push(-4, y, z, -0.3, y, z);
+                // Router → Expert grid edge
+                staticPts.push(-0.3, y, z, -COLS*GAP/2, y - 3, z);
+                staticPts.push(-0.3, y, z, COLS*GAP/2, y - 3, z);
+            }
+            const sBG = new THREE.BufferGeometry();
+            sBG.setAttribute('position', new THREE.Float32BufferAttribute(staticPts, 3));
+            const sBM = new THREE.LineBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.4 });
+            scene.add(new THREE.LineSegments(sBG, sBM));
+
+            // ── Inter-layer vertical beams ──
+            const vPts = [];
+            for (let l = 0; l < L - 1; l++) {
+                const z0 = layerZ(l), z1 = layerZ(l+1), y = Y0 + 8;
+                vPts.push(-8, y, z0, -8, y, z1);
+                vPts.push(-0.3, y, z0, -0.3, y, z1);
+            }
+            const vBG = new THREE.BufferGeometry();
+            vBG.setAttribute('position', new THREE.Float32BufferAttribute(vPts, 3));
+            const vBM = new THREE.LineBasicMaterial({ color: 0x223344, transparent: true, opacity: 0.3 });
+            scene.add(new THREE.LineSegments(vBG, vBM));
+
+            // ── Dynamic: Router→Expert beams ──
+            const bGeo = new THREE.BufferGeometry();
+            bGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(300 * 2 * 3), 3));
+            beamMesh = new THREE.LineSegments(bGeo, new THREE.LineBasicMaterial({ color: C_BEAM, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
+            beamMesh.frustumCulled = false;
+            scene.add(beamMesh);
+
+            // ── Dynamic: Cross-layer expert flow ──
+            const cGeo = new THREE.BufferGeometry();
+            cGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(600 * 2 * 3), 3));
+            crossMesh = new THREE.LineSegments(cGeo, new THREE.LineBasicMaterial({ color: C_FLOW, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending }));
+            crossMesh.frustumCulled = false;
+            scene.add(crossMesh);
+
+
+            // ── Token pulse particles ──
+            const pGeo = new THREE.BufferGeometry();
+            pGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(200*3), 3));
+            pGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array(200), 1));
+            const pMat = new THREE.ShaderMaterial({
+                transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+                vertexShader: 'attribute float size; varying float vA; void main(){ vA=size>0.?1.:0.; vec4 m=modelViewMatrix*vec4(position,1.); gl_PointSize=size*(180./-m.z); gl_Position=projectionMatrix*m; }',
+                fragmentShader: 'varying float vA; void main(){ float d=length(gl_PointCoord-vec2(.5)); if(d>.5||vA<.5)discard; gl_FragColor=vec4(0.,.9,1.,smoothstep(.5,0.,d)); }'
+            });
+            pulsePts = new THREE.Points(pGeo, pMat);
+            scene.add(pulsePts);
+        }
+
+        function expertPos(layer, expert) {
+            const row = Math.floor(expert / COLS);
+            const col = expert % COLS;
+            return [
+                (col - COLS/2 + 0.5) * GAP,
+                Y0 + 3 + (row - ROWS/2 + 0.5) * GAP,
+                layerZ(layer)
+            ];
+        }
+
+        // ── Highlight Token ──
+        function highlightToken(tidx) {
+            if (!traceData || !expertsInst) return;
+            const L = traceData.num_layers;
+            const K = Math.min(traceData.num_experts, 60);
+
+            // Reset experts to dim
+            for (let i = 0; i < L*K; i++) expertsInst.setColorAt(i, C_DIM);
+
+            // Reset attention & norm to default
+            if (routInst) for (let l = 0; l < L; l++) routInst.setColorAt(l, new THREE.Color(0x111111));
+
+            const acts = traceData.activations.filter(a => a.token_idx === tidx && a.expert_idx < K);
+
+            // Beam positions (router→expert)
+            const beamPos = beamMesh.geometry.attributes.position.array;
+            let bi = 0;
+
+            // Cross-layer positions
+            const crossPos = crossMesh.geometry.attributes.position.array;
+            let ci = 0;
+
+            // Pulse particles
+            const pp = pulsePts.geometry.attributes.position.array;
+            const ps = pulsePts.geometry.attributes.size.array;
+            let pi = 0;
+
+            const activeByLayer = {};
+
+            acts.forEach(a => {
+                const ni = a.layer * K + a.expert_idx;
+                const t = Math.min(a.gate_weight, 1);
+                const c = new THREE.Color().lerpColors(C_EXPT, C_ACTV, t);
+                if (t > 0.6) c.lerp(C_HOT, (t - 0.6) * 2.5);
+                expertsInst.setColorAt(ni, c);
+                // Light up the router nodes for active layers
+                if (routInst) {
+                    routInst.setColorAt(a.layer, new THREE.Color(0x66ffff));
+                }
+
+                const [ex, ey, ez] = expertPos(a.layer, a.expert_idx);
+
+                // Router→Expert beam
+                if (bi < 300*2*3) {
+                    beamPos[bi++] = -0.3; beamPos[bi++] = Y0+8; beamPos[bi++] = ez;
+                    beamPos[bi++] = ex; beamPos[bi++] = ey; beamPos[bi++] = ez;
+                }
+
+                // Pulse at expert position
+                if (pi < 200) {
+                    pp[pi*3] = ex; pp[pi*3+1] = ey; pp[pi*3+2] = ez;
+                    ps[pi] = 2 + t * 6;
+                    pi++;
+                }
+
+                // Track active experts per layer
+                if (!activeByLayer[a.layer]) activeByLayer[a.layer] = [];
+                activeByLayer[a.layer].push({idx: a.expert_idx, pos: [ex, ey, ez], gate: a.gate_weight});
+            });
+
+            // Cross-layer flow: connect active experts in layer L to layer L+1
+            const layers = Object.keys(activeByLayer).map(Number).sort((a,b) => a-b);
+            for (let li = 0; li < layers.length - 1; li++) {
+                const layerA = layers[li];
+                const layerB = layerA + 1; // adjacent layer
+                const expertsA = activeByLayer[layerA];
+                const expertsB = activeByLayer[layerB];
+                if (!expertsB) continue;
+
+                for (const ea of expertsA) {
+                    for (const eb of expertsB) {
+                        if (ci < 600*2*3) {
+                            crossPos[ci++] = ea.pos[0]; crossPos[ci++] = ea.pos[1]; crossPos[ci++] = ea.pos[2];
+                            crossPos[ci++] = eb.pos[0]; crossPos[ci++] = eb.pos[1]; crossPos[ci++] = eb.pos[2];
+                        }
+                    }
+                }
+            }
+
+            // Zero unused
+            for (let i = bi; i < beamPos.length; i++) beamPos[i] = 0;
+            for (let i = ci; i < crossPos.length; i++) crossPos[i] = 0;
+            for (let i = pi; i < 200; i++) ps[i] = 0;
+
+            beamMesh.geometry.attributes.position.needsUpdate = true;
+            crossMesh.geometry.attributes.position.needsUpdate = true;
+            expertsInst.instanceColor.needsUpdate = true;
+            if (routInst) routInst.instanceColor.needsUpdate = true;
+            pulsePts.geometry.attributes.position.needsUpdate = true;
+            pulsePts.geometry.attributes.size.needsUpdate = true;
+
+            // UI
+            const tok = traceData.token_strs[tidx] || '?';
+            const maxGate = acts.length ? Math.max(...acts.map(a=>a.gate_weight)).toFixed(3) : '-';
+            const activeLayers = Object.keys(activeByLayer).length;
+            window.activeLayerSet = new Set(Object.keys(activeByLayer).map(Number));
+            document.getElementById('info').innerHTML =
+                '<span class="label">Token:</span> <span class="hl">"' + tok.replace(/</g,'&lt;') + '"</span> (#' + tidx + ')<br>' +
+                '<span class="label">Activations:</span> <span class="hl">' + acts.length + '</span> across ' + activeLayers + ' layers<br>' +
+                '<span class="label">Max gate:</span> <span class="hl">' + maxGate + '</span><br>' +
+                '<span class="label">Cross-layer flow:</span> <span class="hl">' + (ci/6|0) + '</span> connections';
+            document.querySelectorAll('.tok').forEach((el,i) => el.classList.toggle('active', i===tidx));
+        }
+
+        // ── Animate ──
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            tick++;
+            const t = tick * 0.04;
+
+            // Router spin - only active layers rotate
+            if (routInst && window.activeLayerSet) {
+                for (let l = 0; l < routInst.count; l++) {
+                    dummy.position.set(-0.3, Y0+8, l * LAYER_GAP);
+                    if (window.activeLayerSet.has(l)) {
+                        dummy.rotation.set(0, t * 0.5 + l * 0.3, 0);
+                        dummy.scale.set(1.15, 1.15, 1.15);
+                    } else {
+                        dummy.rotation.set(0, l * 0.3, 0);
+                        dummy.scale.set(1, 1, 1);
+                    }
+                    dummy.updateMatrix();
+                    routInst.setMatrixAt(l, dummy.matrix);
+                }
+                routInst.instanceMatrix.needsUpdate = true;
+            }
+
+            // Particle oscillation
+            if (pulsePts) {
+                const ps = pulsePts.geometry.attributes.size.array;
+                for (let i = 0; i < 200; i++) {
+                    if (ps[i] > 0) ps[i] *= 0.94 + 0.06 * Math.sin(t * 3 + i);
+                }
+                pulsePts.geometry.attributes.size.needsUpdate = true;
+            }
+
+            // Auto-play
+            if (isPlaying && traceData && tick % Math.max(1, Math.floor(18/animSpeed)) === 0) {
+                currentToken = (currentToken + 1) % traceData.token_ids.length;
+                highlightToken(currentToken);
+            }
+
+            composer.render();
+        }
+
+        // ── Load / Fetch ──
+        async function loadTrace(id) {
+            try {
+                const r = await fetch('http://localhost:8000/trace/' + id);
+                traceData = await r.json();
+                buildArchitecture(traceData.num_layers, Math.min(traceData.num_experts, 60), traceData.top_k);
+
+                const bar = document.getElementById('tokens');
+                bar.innerHTML = '';
+                traceData.token_strs.forEach((tok, i) => {
+                    const el = document.createElement('div');
+                    el.className = 'tok';
+                    el.textContent = tok || '.';
+                    el.onclick = () => { currentToken = i; highlightToken(i); };
+                    bar.appendChild(el);
+                });
+                currentToken = 0;
+                highlightToken(0);
+                document.getElementById('controls').style.display = 'block';
+                document.querySelectorAll('.trace-chip').forEach(c => c.classList.toggle('active', parseInt(c.dataset.id) === id));
+            } catch (e) { console.error(e); }
+        }
+
+        async function fetchTraces() {
+            const grid = document.getElementById('traces');
+            try {
+                const r = await fetch('http://localhost:8000/traces?limit=24');
+                const traces = await r.json();
+                grid.innerHTML = '';
+                traces.forEach(t => {
+                    const el = document.createElement('div');
+                    el.className = 'trace-chip';
+                    el.dataset.id = t.id;
+                    el.textContent = '#' + t.id;
+                    el.title = (t.text || t.text_hash).substring(0, 40);
+                    el.onclick = () => loadTrace(t.id);
+                    grid.appendChild(el);
+                });
+            } catch (e) { grid.innerHTML = '<div style="color:#555;font-size:9px">No backend</div>'; }
+        }
+
+        window.fetchTraces = fetchTraces;
+
+        // UI handlers
+        document.getElementById('play').onclick = () => { isPlaying = true; controls.autoRotate = false; };
+        document.getElementById('pause').onclick = () => { isPlaying = false; };
+        document.getElementById('reset').onclick = () => { isPlaying = false; currentToken = 0; controls.autoRotate = false; highlightToken(0); };
+        document.getElementById('rotate').onclick = () => { controls.autoRotate = !controls.autoRotate; };
+
+        fetchTraces();
+        animate();
+        
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>

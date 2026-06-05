@@ -1,0 +1,74 @@
+{
+  "traces": [
+    {
+      "model_id": "test/model-a",
+      "model_class": "",
+      "num_layers": 4,
+      "num_experts": 8,
+      "top_k": 2,
+      "hidden_dim": 0,
+      "text": "Hello world",
+      "token_ids": [
+        1,
+        2
+      ],
+      "token_strs": [
+        "Hello",
+        " world"
+      ],
+      "activations": [
+        {
+          "layer": 0,
+          "token_idx": 0,
+          "expert_idx": 1,
+          "gate_weight": 0.5,
+          "output_norm": 0.0
+        },
+        {
+          "layer": 1,
+          "token_idx": 0,
+          "expert_idx": 3,
+          "gate_weight": 0.7,
+          "output_norm": 0.0
+        }
+      ],
+      "timestamp": "2026-06-05T16:18:26.836445",
+      "model_name": ""
+    },
+    {
+      "model_id": "test/model-b",
+      "model_class": "",
+      "num_layers": 4,
+      "num_experts": 8,
+      "top_k": 2,
+      "hidden_dim": 0,
+      "text": "Goodbye moon",
+      "token_ids": [
+        3,
+        4
+      ],
+      "token_strs": [
+        "Goodbye",
+        " moon"
+      ],
+      "activations": [
+        {
+          "layer": 0,
+          "token_idx": 0,
+          "expert_idx": 2,
+          "gate_weight": 0.6,
+          "output_norm": 0.0
+        },
+        {
+          "layer": 1,
+          "token_idx": 0,
+          "expert_idx": 4,
+          "gate_weight": 0.8,
+          "output_norm": 0.0
+        }
+      ],
+      "timestamp": "2026-06-05T16:18:26.836445",
+      "model_name": ""
+    }
+  ]
+}
