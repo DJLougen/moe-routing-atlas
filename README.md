@@ -40,7 +40,6 @@ Every visual element is tied to **actual routing data** — nothing is decorativ
 
 ### Main Visualization
 
-![Visualizer Overview](docs/screenshots/viz-overview.png)
 *Interactive 3D scene showing 24 layers of expert routing. Click any token to see its path.*
 
 ### Token Routing Detail
