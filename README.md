@@ -2,6 +2,16 @@
 
 > **Open-source toolkit for mapping and visualizing Mixture-of-Experts model routing patterns.**
 
+## What Is This Repo?
+
+This repository contains **MoE Atlas** — a command-line tool and web visualizer that lets you see inside Mixture-of-Experts (MoE) language models. 
+
+MoE models (like Mixtral, Qwen-MoE, Gemma-4) use sparse routing: for each token, a "router" network picks a small subset of "expert" feed-forward networks to process it. This repo captures those routing decisions during inference and renders them as an interactive 3D scene you can explore token-by-token, layer-by-layer.
+
+**Key idea:** Most of an MoE model's parameters are never touched for any given token. This tool makes that sparsity visible.
+
+**Motivation:** [Cerebras](https://www.cerebras.ai/blog/moe-guide-why-moe) describes sparse MoE as the future of efficient large-scale AI — enabling trillion-parameter models without trillion-parameter compute. We built this to help researchers and practitioners understand what actually happens inside these routers.
+
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI](https://img.shields.io/badge/pip-moe--atlas-blue)](https://pypi.org/project/moe-atlas/)
@@ -422,6 +432,29 @@ pip install -e .
 # Or upgrade dependencies
 pip install -e ".[dev]" --upgrade
 ```
+
+---
+
+## References & Background
+
+### Why MoE Routing Matters
+
+Mixture-of-Experts (MoE) is the dominant architecture for scaling language models beyond dense parameter limits. Instead of activating every parameter for every token, MoE models use a learned router to dispatch each token to a small subset of expert feed-forward networks. This enables trillion-parameter models with sub-trillion compute costs.
+
+**Cerebras on sparse MoE:**
+- [MoE Fundamentals: Why Sparse Models Are the Future of AI](https://www.cerebras.ai/blog/moe-guide-why-moe) — Cerebras explains how sparse routing enables models like GPT-4 scale without proportional compute cost
+- [MoE at Scale: Making Sparse Models Fast on Real Hardware](https://www.cerebras.ai/blog/moe-guide-scale) — How sparse routing subdivides batches across experts and the hardware challenges this creates
+
+**Key insight from Cerebras:** "With a sparse MoE model, our routing subdivides the batch size across many experts. It results in most experts only seeing a tiny portion of the batch." This is exactly what MoE Atlas visualizes — which experts see which tokens.
+
+### Related Work
+
+| Resource | What It Covers |
+|----------|---------------|
+| [Cerebras MoE Guide](https://www.cerebras.ai/blog/moe-guide-why-moe) | Why sparse MoE is the future of efficient large-scale AI |
+| [Representation Collapse of Sparse MoE](https://openreview.net/forum?id=mWaYC6CZf5) (Chi et al., NeurIPS 2022) | How naive routing causes token representations to cluster excessively |
+| [Switch Transformers](https://arxiv.org/abs/2101.03961) (Fedus et al., 2021) | Google's trillion-parameter sparse model with top-1 routing |
+| [Mixtral of Experts](https://arxiv.org/abs/2401.04088) (Jiang et al., 2024) | Open-source 8x7B sparse model, state-of-the-art for its size |
 
 ---
 
