@@ -501,7 +501,7 @@
                     el.className = 'trace-chip';
                     el.dataset.id = traceId;
                     el.textContent = '#' + traceId;
-                    el.title = (t.text || t.text_hash || '').substring(0, 40);
+                    el.title = (t.model_name || 'trace') + ' · ' + (t.num_tokens ?? '?') + ' tokens';
                     el.onclick = () => loadTrace(traceId);
                     grid.appendChild(el);
                 });

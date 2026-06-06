@@ -15,6 +15,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
+from .__version__ import __version__
 from .config import get_config
 from .schema import Trace
 
@@ -144,20 +145,26 @@ def _migrate_schema(cursor: sqlite3.Cursor) -> None:
         cursor.execute("ALTER TABLE traces ADD COLUMN model_id TEXT")
 
 
-def _normalize_trace_row(trace: dict[str, Any]) -> dict[str, Any]:
+def _text_preview(text: str, max_len: int = 40) -> str:
+    """Return a short, non-sensitive preview of trace input text."""
+    cleaned = (text or "").replace("\n", " ").strip()
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[: max_len - 1] + "…"
+
+
+def _normalize_trace_row(trace: dict[str, Any], *, include_text: bool = True) -> dict[str, Any]:
     """Normalize DB row fields for API consumers and the visualizer."""
     tokens_raw = trace.get("tokens", "[]")
     token_strs = json.loads(tokens_raw) if isinstance(tokens_raw, str) else tokens_raw
     token_ids_raw = trace.get("token_ids", "[]")
     token_ids = json.loads(token_ids_raw) if isinstance(token_ids_raw, str) else token_ids_raw
+    full_text = trace.get("text", "")
 
     normalized = {
         "id": trace["trace_id"],
         "trace_id": trace["trace_id"],
-        "text": trace.get("text", ""),
-        "token_strs": token_strs,
-        "tokens": token_strs,
-        "token_ids": token_ids,
+        "text_preview": _text_preview(full_text),
         "num_tokens": trace.get("num_tokens", len(token_ids)),
         "num_layers": trace.get("num_layers"),
         "num_experts": trace.get("num_experts"),
@@ -166,6 +173,11 @@ def _normalize_trace_row(trace: dict[str, Any]) -> dict[str, Any]:
         "model_name": trace.get("model_name"),
         "model_id": trace.get("model_id") or trace.get("model_name"),
     }
+    if include_text:
+        normalized["text"] = full_text
+        normalized["token_strs"] = token_strs
+        normalized["tokens"] = token_strs
+        normalized["token_ids"] = token_ids
     if "activations" in trace:
         normalized["activations"] = trace["activations"]
     return normalized
@@ -177,7 +189,7 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
 
     @app.get("/")
     def root():
-        return {"message": "MoE Routing Atlas API", "version": "0.1.0"}
+        return {"message": "MoE Routing Atlas API", "version": __version__}
 
     @app.get("/traces")
     def list_traces(limit: int = 100):
@@ -191,7 +203,10 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
                 "FROM traces ORDER BY trace_id DESC LIMIT ?",
                 (limit,),
             )
-            traces = [_normalize_trace_row(dict(row)) for row in cursor.fetchall()]
+            traces = [
+                _normalize_trace_row(dict(row), include_text=False)
+                for row in cursor.fetchall()
+            ]
             return traces
         finally:
             conn.close()

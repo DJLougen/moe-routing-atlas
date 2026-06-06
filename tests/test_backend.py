@@ -71,6 +71,9 @@ def test_list_traces_returns_normalized_ids(client: TestClient):
     traces = response.json()
     assert len(traces) == 1
     assert traces[0]["id"] == traces[0]["trace_id"]
+    assert "text" not in traces[0]
+    assert "token_strs" not in traces[0]
+    assert traces[0]["text_preview"] == "Hello world"
 
 
 def test_list_limit_is_clamped(client: TestClient):
