@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "moe-atlas"
-version = "0.1.0"
+version = "0.2.0"
 description = "Open-source toolkit for mapping and visualizing Mixture-of-Experts model routing patterns"
 readme = "README.md"
 license = {text = "MIT"}
@@ -63,10 +63,11 @@ dev = [
 moe-atlas = "moe_routing_atlas.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/moe-atlas/moe-routing-atlas"
-Documentation = "https://github.com/moe-atlas/moe-routing-atlas#readme"
-Repository = "https://github.com/moe-atlas/moe-routing-atlas"
-Issues = "https://github.com/moe-atlas/moe-routing-atlas/issues"
+Homepage = "https://github.com/DJLougen/moe-routing-atlas"
+Documentation = "https://github.com/DJLougen/moe-routing-atlas#readme"
+Repository = "https://github.com/DJLougen/moe-routing-atlas"
+Issues = "https://github.com/DJLougen/moe-routing-atlas/issues"
+Changelog = "https://github.com/DJLougen/moe-routing-atlas/blob/master/CHANGELOG.md"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/moe_routing_atlas"]
@@ -77,6 +78,7 @@ include = [
     "/README.md",
     "/LICENSE",
     "/CONTRIBUTING.md",
+    "/CHANGELOG.md",
 ]
 
 [tool.black]
