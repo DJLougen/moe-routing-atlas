@@ -1,7 +1,5 @@
 """MoE Atlas CLI — command-line interface for the routing atlas toolkit."""
 
-import subprocess
-import sys
 import webbrowser
 from pathlib import Path
 
@@ -35,7 +33,7 @@ def cli():
 
 
 @cli.command()
-@click.option("--host", default=None, help="Server host (default: 0.0.0.0)")
+@click.option("--host", default=None, help="Server host (default: 127.0.0.1)")
 @click.option("--port", default=None, type=int, help="Server port (default: 8000)")
 @click.option("--db", default=None, help="SQLite database path")
 @click.option("--reload", is_flag=True, help="Enable auto-reload (dev only)")
@@ -66,7 +64,13 @@ def serve(host, port, db, reload):
 @click.option("--backend", "-b", default=None, help="Backend URL to send traces to")
 @click.option("--file", "-f", type=click.Path(exists=True), help="Read text from file")
 @click.option("--output", "-o", type=click.Path(), help="Save trace to file instead of sending")
-def trace(text, model, quant, device, backend, file, output):
+@click.option(
+    "--trust-remote-code",
+    is_flag=True,
+    default=None,
+    help="Allow HuggingFace trust_remote_code (required for some MoE models)",
+)
+def trace(text, model, quant, device, backend, file, output, trust_remote_code):
     """Trace expert routing for a given text through an MoE model."""
     _banner()
     config = get_config()
@@ -94,13 +98,16 @@ def trace(text, model, quant, device, backend, file, output):
         quant=quant,
         device=device,
         backend_url=backend_url if not output else None,
+        trust_remote_code=trust_remote_code,
     )
 
     if output:
         Path(output).write_text(result.model_dump_json(indent=2), encoding="utf-8")
         console.print(f"[green]Trace saved to {output}[/green]")
-    else:
+    elif result.trace_id is not None:
         console.print(f"[green]Trace sent to {backend_url} — ID {result.trace_id}[/green]")
+    else:
+        console.print(f"[yellow]Trace completed but backend upload failed[/yellow]")
 
 
 @cli.command()
@@ -109,7 +116,13 @@ def trace(text, model, quant, device, backend, file, output):
 @click.option("--quant", "-q", default=None, help="Quantization")
 @click.option("--device", "-d", default=None, help="Device")
 @click.option("--backend", "-b", default=None, help="Backend URL")
-def batch(input_file, model, quant, device, backend):
+@click.option(
+    "--trust-remote-code",
+    is_flag=True,
+    default=None,
+    help="Allow HuggingFace trust_remote_code (required for some MoE models)",
+)
+def batch(input_file, model, quant, device, backend, trust_remote_code):
     """Trace multiple texts from a file (one per line)."""
     _banner()
     config = get_config()
@@ -132,6 +145,7 @@ def batch(input_file, model, quant, device, backend):
         quant=quant,
         device=device,
         backend_url=backend_url,
+        trust_remote_code=trust_remote_code,
     )
 
     table = Table(title="Batch Trace Results")

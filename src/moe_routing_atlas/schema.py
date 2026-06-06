@@ -34,13 +34,15 @@ class Trace(BaseModel):
     hidden_dim: int = Field(default=0, description="Hidden dimension size")
 
     # Input
-    text: str = Field(default="", description="Input text")
+    text: str = Field(default="", max_length=100_000, description="Input text")
     token_ids: list[int] = Field(default_factory=list, description="Token ID sequence")
     token_strs: list[str] = Field(default_factory=list, description="Token string sequence")
 
     # Routing decisions
     activations: list[TraceActivation] = Field(
-        default_factory=list, description="All expert activations"
+        default_factory=list,
+        max_length=500_000,
+        description="All expert activations",
     )
 
     # Metadata
@@ -49,6 +51,7 @@ class Trace(BaseModel):
         description="ISO 8601 timestamp",
     )
     model_name: str = Field(default="", description="Model name for display")
+    trace_id: int | None = Field(default=None, description="Backend-assigned trace ID")
 
     # Derived properties
     @property

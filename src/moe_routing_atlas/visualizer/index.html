@@ -69,6 +69,7 @@
         </div>
     </div>
 
+    <!-- Three.js pinned to 0.160.0; CSP enforced by backend SecurityHeadersMiddleware -->
     <script type="importmap">
     { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
     </script>
@@ -159,6 +160,44 @@
         // ── Mesh refs ──
         let expertsInst = null, routInst = null;
         let beamMesh = null, crossMesh = null, pulsePts = null;
+        let architectureStaticMeshes = [];
+
+        function escapeHtml(value) {
+            return String(value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function normalizeTrace(data) {
+            data.token_strs = data.token_strs || data.tokens || [];
+            data.token_ids = data.token_ids || [];
+            data.id = data.id ?? data.trace_id;
+            return data;
+        }
+
+        function setInfoPanel(tidx, tok, acts, activeLayers, maxGate, connections) {
+            const info = document.getElementById('info');
+            info.textContent = '';
+            const addLine = (label, value, highlight) => {
+                const line = document.createElement('div');
+                const labelEl = document.createElement('span');
+                labelEl.className = 'label';
+                labelEl.textContent = label + ': ';
+                const valueEl = document.createElement('span');
+                valueEl.className = highlight ? 'hl' : '';
+                valueEl.textContent = value;
+                line.appendChild(labelEl);
+                line.appendChild(valueEl);
+                info.appendChild(line);
+            };
+            addLine('Token', '"' + tok + '" (#' + tidx + ')', true);
+            addLine('Activations', String(acts.length) + ' across ' + activeLayers + ' layers', true);
+            addLine('Max gate', maxGate, true);
+            addLine('Cross-layer flow', String(connections) + ' connections', true);
+        }
 
         const dummy = new THREE.Object3D();
 
@@ -168,9 +207,10 @@
         function layerZ(l) { return l * LAYER_GAP; }
 
         function buildArchitecture(L, K, topK) {
-            [expertsInst, routInst, beamMesh, crossMesh, pulsePts].forEach(m => {
+            [expertsInst, routInst, beamMesh, crossMesh, pulsePts, ...architectureStaticMeshes].forEach(m => {
                 if (m) { scene.remove(m); m.geometry?.dispose?.(); m.material?.dispose?.(); }
             });
+            architectureStaticMeshes = [];
 
             const eK = Math.min(K, 60);
 
@@ -228,7 +268,8 @@
             const sBG = new THREE.BufferGeometry();
             sBG.setAttribute('position', new THREE.Float32BufferAttribute(staticPts, 3));
             const sBM = new THREE.LineBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.4 });
-            scene.add(new THREE.LineSegments(sBG, sBM));
+            architectureStaticMeshes.push(new THREE.LineSegments(sBG, sBM));
+            scene.add(architectureStaticMeshes[architectureStaticMeshes.length - 1]);
 
             // ── Inter-layer vertical beams ──
             const vPts = [];
@@ -240,7 +281,8 @@
             const vBG = new THREE.BufferGeometry();
             vBG.setAttribute('position', new THREE.Float32BufferAttribute(vPts, 3));
             const vBM = new THREE.LineBasicMaterial({ color: 0x223344, transparent: true, opacity: 0.3 });
-            scene.add(new THREE.LineSegments(vBG, vBM));
+            architectureStaticMeshes.push(new THREE.LineSegments(vBG, vBM));
+            scene.add(architectureStaticMeshes[architectureStaticMeshes.length - 1]);
 
             // ── Dynamic: Router→Expert beams ──
             const bGeo = new THREE.BufferGeometry();
@@ -376,11 +418,7 @@
             const maxGate = acts.length ? Math.max(...acts.map(a=>a.gate_weight)).toFixed(3) : '-';
             const activeLayers = Object.keys(activeByLayer).length;
             window.activeLayerSet = new Set(Object.keys(activeByLayer).map(Number));
-            document.getElementById('info').innerHTML =
-                '<span class="label">Token:</span> <span class="hl">"' + tok.replace(/</g,'&lt;') + '"</span> (#' + tidx + ')<br>' +
-                '<span class="label">Activations:</span> <span class="hl">' + acts.length + '</span> across ' + activeLayers + ' layers<br>' +
-                '<span class="label">Max gate:</span> <span class="hl">' + maxGate + '</span><br>' +
-                '<span class="label">Cross-layer flow:</span> <span class="hl">' + (ci/6|0) + '</span> connections';
+            setInfoPanel(tidx, tok, acts, activeLayers, maxGate, ci / 6 | 0);
             document.querySelectorAll('.tok').forEach((el,i) => el.classList.toggle('active', i===tidx));
         }
 
@@ -429,8 +467,9 @@
         // ── Load / Fetch ──
         async function loadTrace(id) {
             try {
-                const r = await fetch('http://localhost:8000/trace/' + id);
-                traceData = await r.json();
+                const r = await fetch('/trace/' + id);
+                if (!r.ok) throw new Error('Trace ' + id + ' not found');
+                traceData = normalizeTrace(await r.json());
                 buildArchitecture(traceData.num_layers, Math.min(traceData.num_experts, 60), traceData.top_k);
 
                 const bar = document.getElementById('tokens');
@@ -452,19 +491,28 @@
         async function fetchTraces() {
             const grid = document.getElementById('traces');
             try {
-                const r = await fetch('http://localhost:8000/traces?limit=24');
+                const r = await fetch('/traces?limit=24');
+                if (!r.ok) throw new Error('Failed to load traces');
                 const traces = await r.json();
                 grid.innerHTML = '';
                 traces.forEach(t => {
+                    const traceId = t.id ?? t.trace_id;
                     const el = document.createElement('div');
                     el.className = 'trace-chip';
-                    el.dataset.id = t.id;
-                    el.textContent = '#' + t.id;
-                    el.title = (t.text || t.text_hash).substring(0, 40);
-                    el.onclick = () => loadTrace(t.id);
+                    el.dataset.id = traceId;
+                    el.textContent = '#' + traceId;
+                    el.title = (t.text || t.text_hash || '').substring(0, 40);
+                    el.onclick = () => loadTrace(traceId);
                     grid.appendChild(el);
                 });
-            } catch (e) { grid.innerHTML = '<div style="color:#555;font-size:9px">No backend</div>'; }
+            } catch (e) {
+                grid.textContent = '';
+                const err = document.createElement('div');
+                err.style.color = '#555';
+                err.style.fontSize = '9px';
+                err.textContent = 'No backend';
+                grid.appendChild(err);
+            }
         }
 
         window.fetchTraces = fetchTraces;

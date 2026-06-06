@@ -1,20 +1,32 @@
 """Configuration management for MoE Atlas."""
 
-import os
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AtlasConfig(BaseSettings):
     """Runtime configuration for MoE Atlas."""
 
+    model_config = SettingsConfigDict(
+        env_prefix="MOE_ATLAS_",
+        env_file=".env",
+        env_file_encoding="utf-8",
+    )
+
     # Backend
-    backend_host: str = Field(default="0.0.0.0", description="Backend server host")
+    backend_host: str = Field(default="127.0.0.1", description="Backend server host")
     backend_port: int = Field(default=8000, description="Backend server port")
     backend_url: str = Field(default="http://localhost:8000", description="Full backend URL")
+    cors_origins: str = Field(
+        default="http://127.0.0.1:8000,http://localhost:8000",
+        description="Comma-separated CORS origins",
+    )
+    max_list_limit: int = Field(default=500, description="Maximum traces list limit")
 
     # Database
     db_path: Path = Field(
@@ -34,6 +46,10 @@ class AtlasConfig(BaseSettings):
     default_device: str = Field(
         default="cuda",
         description="Default compute device (cuda, mps, cpu)",
+    )
+    trust_remote_code: bool = Field(
+        default=False,
+        description="Allow HuggingFace trust_remote_code when loading models",
     )
 
     # Tracing
@@ -62,10 +78,9 @@ class AtlasConfig(BaseSettings):
         description="Auto-rotate camera by default",
     )
 
-    class Config:
-        env_prefix = "MOE_ATLAS_"
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    def cors_origin_list(self) -> list[str]:
+        """Parse configured CORS origins."""
+        return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 # Global config instance
@@ -77,7 +92,6 @@ def get_config() -> AtlasConfig:
     global _config
     if _config is None:
         _config = AtlasConfig()
-        # Ensure directories exist
         _config.db_path.parent.mkdir(parents=True, exist_ok=True)
         _config.export_dir.mkdir(parents=True, exist_ok=True)
     return _config
