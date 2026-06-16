@@ -62,6 +62,38 @@ def extract_routing_from_output(
     return None, None
 
 
+def discover_moe_blocks(model: nn.Module) -> tuple[list[tuple[nn.Module, int]], int]:
+    """Find MoE router blocks and their layer indices, memoized per model.
+
+    The module tree is static across forward passes, so repeated / batch tracing
+    reuses the cached result instead of re-walking every named module each time
+    (a real model can have thousands of submodules). The cache is a plain
+    attribute holding already-registered submodules, so it does not affect
+    ``named_modules``/``state_dict``.
+    """
+    cached = getattr(model, "_moe_atlas_blocks", None)
+    if cached is not None:
+        return cached
+
+    blocks: list[tuple[nn.Module, int]] = []
+    layer_indices: set[int] = set()
+    fallback = 0
+    for name, module in model.named_modules():
+        if not is_moe_routing_block(name, module):
+            continue
+        layer_idx = extract_layer_index(name, fallback)
+        fallback += 1
+        layer_indices.add(layer_idx)
+        blocks.append((module, layer_idx))
+
+    result = (blocks, len(layer_indices) or fallback)
+    try:
+        model._moe_atlas_blocks = result
+    except (AttributeError, TypeError):
+        pass
+    return result
+
+
 def register_moe_hooks(model: nn.Module) -> tuple[list[Any], dict[str, Any]]:
     """Register forward hooks on MoE router blocks."""
     state: dict[str, Any] = {
@@ -79,35 +111,38 @@ def register_moe_hooks(model: nn.Module) -> tuple[list[Any], dict[str, Any]]:
         if topk_idx is None:
             return
 
-        for token_pos in range(topk_idx.shape[0]):
-            for expert_pos in range(topk_idx.shape[1]):
-                expert = topk_idx[token_pos, expert_pos].item()
-                weight = topk_weight[token_pos, expert_pos].item()
-                state["activations"].append(
-                    TraceActivation(
-                        layer=layer_idx,
-                        token_idx=token_pos,
-                        expert_idx=expert,
-                        gate_weight=weight,
-                    )
-                )
-                if expert >= state["num_experts"]:
-                    state["num_experts"] = expert + 1
+        # Bulk-transfer the whole [tokens, top_k] grids once instead of a
+        # per-element .item() round-trip; indices and weights are already native
+        # ints/floats after tolist(). TraceActivation is a lightweight dataclass,
+        # so direct construction is cheap.
+        idx_rows = topk_idx.detach().to("cpu").tolist()
+        weight_rows = topk_weight.detach().to("cpu").tolist()
+
+        # Build activations in one extend() with positional dataclass args
+        # (faster than per-append kwargs construction), and derive num_experts
+        # from a single tensor reduction instead of a per-element comparison.
+        activations = state["activations"]
+        construct = TraceActivation
+        activations.extend(
+            construct(layer_idx, token_pos, expert, weight)
+            for token_pos, (experts, weights) in enumerate(zip(idx_rows, weight_rows))
+            for expert, weight in zip(experts, weights)
+        )
+        if idx_rows:
+            highest = int(topk_idx.max()) + 1
+            if highest > state["num_experts"]:
+                state["num_experts"] = highest
 
     hooks: list[Any] = []
-    fallback = 0
-    for name, module in model.named_modules():
-        if not is_moe_routing_block(name, module):
-            continue
-        layer_idx = extract_layer_index(name, fallback)
-        fallback += 1
+    blocks, num_layers = discover_moe_blocks(model)
+    for module, layer_idx in blocks:
         state["layer_indices"].add(layer_idx)
         hook = module.register_forward_hook(
             lambda m, i, o, idx=layer_idx: capture_routing(m, i, o, idx)
         )
         hooks.append(hook)
 
-    state["num_layers"] = len(state["layer_indices"]) or fallback
+    state["num_layers"] = num_layers
     return hooks, state
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import orjson
 from pathlib import Path
 
 import httpx
@@ -60,40 +61,56 @@ def _import_payload_to_trace(data: dict) -> dict:
 def export_traces(db_path: Path, output_dir: Path, fmt: str = "json") -> Path:
     """Export all traces from SQLite database to a file."""
     import sqlite3
+    from datetime import datetime
+    from itertools import groupby
 
     conn = sqlite3.connect(db_path)
-    traces_df = pd.read_sql_query("SELECT * FROM traces ORDER BY trace_id", conn)
-    activations_df = pd.read_sql_query(
-        "SELECT * FROM activations ORDER BY trace_id, layer, token_idx",
-        conn,
-    )
-    conn.close()
-
-    traces = []
-    for _, row in traces_df.iterrows():
-        trace_row = dict(row)
-        trace_id = trace_row["trace_id"]
-        activations = (
-            activations_df[activations_df["trace_id"] == trace_id]
-            .drop(columns=["trace_id", "activation_id"], errors="ignore")
-            .to_dict("records")
+    conn.row_factory = sqlite3.Row
+    try:
+        trace_rows = conn.execute("SELECT * FROM traces ORDER BY trace_id").fetchall()
+        # Stream activations already ordered by trace_id and group them in a
+        # single pass (avoids a SQLite -> DataFrame -> dict round-trip). A tuple
+        # cursor (row_factory=None) is faster than sqlite3.Row key/positional
+        # access when materializing 100k+ activation dicts.
+        activation_cursor = conn.cursor()
+        activation_cursor.row_factory = None
+        activation_cursor.execute(
+            "SELECT trace_id, layer, token_idx, expert_idx, gate_weight "
+            "FROM activations ORDER BY trace_id, layer, token_idx"
         )
-        traces.append(_db_row_to_trace_payload(trace_row, activations))
+        activations_by_trace: dict = {}
+        for trace_id, group in groupby(activation_cursor, key=lambda r: r[0]):
+            activations_by_trace[trace_id] = [
+                {
+                    "layer": row[1],
+                    "token_idx": row[2],
+                    "expert_idx": row[3],
+                    "gate_weight": row[4],
+                }
+                for row in group
+            ]
+    finally:
+        conn.close()
+
+    traces = [
+        _db_row_to_trace_payload(dict(row), activations_by_trace.get(row["trace_id"], []))
+        for row in trace_rows
+    ]
 
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
     if fmt == "json":
         output_path = output_dir / f"moe_atlas_export_{timestamp}.json"
-        output_path.write_text(
-            json.dumps({"traces": traces}, indent=2),
-            encoding="utf-8",
-        )
+        output_path.write_bytes(orjson.dumps({"traces": traces}, option=orjson.OPT_INDENT_2))
     elif fmt == "jsonl":
         output_path = output_dir / f"moe_atlas_export_{timestamp}.jsonl"
-        with open(output_path, "w", encoding="utf-8") as handle:
+        with open(output_path, "wb") as handle:
             for trace in traces:
-                handle.write(json.dumps(trace) + "\n")
+                # orjson (Rust) serializes ~8x faster than stdlib json and emits
+                # compact bytes -> smaller, quicker-to-share records.
+                handle.write(orjson.dumps(trace))
+                handle.write(b"\n")
     elif fmt == "parquet":
         output_path = output_dir / f"moe_atlas_export_{timestamp}.parquet"
         flat = []
@@ -113,9 +130,10 @@ def import_traces(input_path: str, backend_url: str) -> int:
     path = Path(input_path)
 
     if path.suffix == ".jsonl":
-        traces = [json.loads(line) for line in path.read_text(encoding="utf-8").strip().split("\n")]
+        lines = path.read_text(encoding="utf-8").strip().split("\n")
+        traces = [orjson.loads(line) for line in lines]
     else:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = orjson.loads(path.read_text(encoding="utf-8"))
         traces = data.get("traces", [data])
 
     count = 0
@@ -139,9 +157,9 @@ def import_traces(input_path: str, backend_url: str) -> int:
 
 def load_trace_from_file(path: str) -> dict:
     """Load a single trace from a JSON file."""
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return orjson.loads(Path(path).read_bytes())
 
 
 def save_trace_to_file(trace: dict, path: str) -> None:
     """Save a trace to a JSON file."""
-    Path(path).write_text(json.dumps(trace, indent=2), encoding="utf-8")
+    Path(path).write_bytes(orjson.dumps(trace, option=orjson.OPT_INDENT_2))

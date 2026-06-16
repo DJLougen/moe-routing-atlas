@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-15
+
+### Added
+- `orjson` for fast JSON serialization (new required dependency).
+
+### Changed
+- Significantly reduced end-to-end trace pipeline latency (capture, store, query, export) while keeping routing activation counts and gate-weight values byte-for-byte identical:
+  - `capture`: router decisions are extracted with bulk tensor `.tolist()` instead of per-element `.item()`, and MoE block discovery is memoized per model.
+  - `schema.TraceActivation`: now a slotted `@dataclass` instead of a Pydantic model.
+  - `backend.create_trace`: activations are stored with a single batched `executemany` instead of per-row inserts.
+  - `backend`: trace reads and exports use tuple-row SQLite cursors instead of `sqlite3.Row`.
+  - `exporter`: JSON/JSONL export builds rows from a single grouped SQLite scan; pandas is now used only for Parquet output.
+- New SQLite databases use a leaner activations schema (single `trace_id` index, no `AUTOINCREMENT` surrogate key); existing databases remain readable.
+- The backend now reports the installed package version instead of a hard-coded value.
+
 ## [0.2.1] - 2026-06-06
 
 ### Security
@@ -51,7 +66,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Three.js 3D visualizer
 - Batch and single-text tracers for HuggingFace MoE models
 
-[Unreleased]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/DJLougen/moe-routing-atlas/releases/tag/v0.1.0

@@ -8,9 +8,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
+import orjson
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
@@ -20,6 +22,31 @@ from .config import get_config
 from .schema import Trace
 
 MAX_REQUEST_BYTES = 50 * 1024 * 1024
+
+
+class ORJSONRequest(Request):
+    """Request that parses the JSON body with orjson (Rust, ~3x faster than stdlib)."""
+
+    async def json(self) -> Any:
+        if not hasattr(self, "_json"):
+            self._json = orjson.loads(await self.body())
+        return self._json
+
+
+class ORJSONRoute(APIRoute):
+    """Route class wiring ORJSONRequest so request-body parsing uses orjson.
+
+    Keeps FastAPI's normal parameter validation, OpenAPI schema, and 422 error
+    handling intact -- only the JSON decode step is swapped.
+    """
+
+    def get_route_handler(self):
+        original_handler = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            return await original_handler(ORJSONRequest(request.scope, request.receive))
+
+        return handler
 
 
 def create_app(db_path: str | None = None) -> FastAPI:
@@ -36,9 +63,10 @@ def create_app(db_path: str | None = None) -> FastAPI:
     app = FastAPI(
         title="MoE Routing Atlas",
         description="API for Mixture-of-Experts routing visualization",
-        version="0.1.0",
+        version=__version__,
         lifespan=lifespan,
     )
+    app.router.route_class = ORJSONRoute
 
     app.add_middleware(
         CORSMiddleware,
@@ -113,9 +141,12 @@ def _init_db(db_path: str) -> None:
         )
     """)
 
+    # activation_id is a plain rowid alias (no AUTOINCREMENT): it is a surrogate
+    # key never read by any query, so the monotonic-no-reuse guarantee is pure
+    # per-insert overhead (sqlite_sequence maintenance) on the hot 100k+-row path.
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS activations (
-            activation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            activation_id INTEGER PRIMARY KEY,
             trace_id INTEGER NOT NULL,
             layer INTEGER NOT NULL,
             token_idx INTEGER NOT NULL,
@@ -125,9 +156,15 @@ def _init_db(db_path: str) -> None:
         )
     """)
 
+    # get_trace / DELETE cascade filter activations by trace_id only, so a
+    # single-column index matches the access pattern. It is smaller than the
+    # former (trace_id, layer, token_idx) composite, giving faster inserts AND
+    # faster trace_id lookups (export's ORDER BY is unaffected at scale). Drop
+    # the old composite first so existing databases don't keep both.
+    cursor.execute("DROP INDEX IF EXISTS idx_activations_trace_layer_token")
     cursor.execute("""
-        CREATE INDEX IF NOT EXISTS idx_activations_trace_layer_token
-        ON activations (trace_id, layer, token_idx)
+        CREATE INDEX IF NOT EXISTS idx_activations_trace
+        ON activations (trace_id)
     """)
 
     _migrate_schema(cursor)
@@ -224,9 +261,16 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
 
             trace = dict(trace_row)
             try:
+                act_cursor = conn.cursor()
+                act_cursor.row_factory = None  # tuples beat sqlite3.Row for 100k+ rows
                 trace["activations"] = [
-                    dict(row)
-                    for row in cursor.execute(
+                    {
+                        "layer": row[0],
+                        "token_idx": row[1],
+                        "expert_idx": row[2],
+                        "gate_weight": row[3],
+                    }
+                    for row in act_cursor.execute(
                         "SELECT layer, token_idx, expert_idx, gate_weight "
                         "FROM activations WHERE trace_id = ?",
                         (trace_id,),
@@ -235,7 +279,15 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
             except sqlite3.Error as exc:
                 raise HTTPException(status_code=500, detail=f"Database error: {exc}") from exc
 
-            return _normalize_trace_row(trace)
+            # Return a pre-rendered Response so FastAPI skips jsonable_encoder's
+            # recursive walk over the (potentially huge) activation list; orjson
+            # (Rust) serializes the row dicts ~8x faster than stdlib json. Plain
+            # Response (vs ORJSONResponse) stays version-agnostic and avoids
+            # FastAPI's response-class deprecation path.
+            return Response(
+                orjson.dumps(_normalize_trace_row(trace)),
+                media_type="application/json",
+            )
         finally:
             conn.close()
 
@@ -263,19 +315,21 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
                 )
                 new_trace_id = cursor.lastrowid
 
-                for activation in trace.activations:
-                    cursor.execute(
-                        "INSERT INTO activations "
-                        "(trace_id, layer, token_idx, expert_idx, gate_weight) "
-                        "VALUES (?, ?, ?, ?, ?)",
+                cursor.executemany(
+                    "INSERT INTO activations "
+                    "(trace_id, layer, token_idx, expert_idx, gate_weight) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    [
                         (
                             new_trace_id,
                             activation.layer,
                             activation.token_idx,
                             activation.expert_idx,
                             activation.gate_weight,
-                        ),
-                    )
+                        )
+                        for activation in trace.activations
+                    ],
+                )
         except sqlite3.Error as exc:
             raise HTTPException(status_code=500, detail=f"Failed to store trace: {exc}") from exc
         finally:

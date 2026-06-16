@@ -7,19 +7,27 @@ Traces are appendable — you can accumulate thousands of them for population-le
 from __future__ import annotations
 
 from datetime import datetime
+from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 
-class TraceActivation(BaseModel):
-    """One expert activation at one layer for one token."""
+@dataclass(slots=True)
+class TraceActivation:
+    """One expert activation at one layer for one token.
 
-    layer: int = Field(..., description="Layer index")
-    token_idx: int = Field(..., description="Token position in sequence")
-    expert_idx: int = Field(..., description="Expert index within layer")
-    gate_weight: float = Field(..., description="Router gate weight for this expert")
-    output_norm: float = Field(default=0.0, description="Output norm if available, else 0.0")
+    A plain slotted dataclass rather than a pydantic model: a single trace can
+    hold hundreds of thousands of activations, and dataclass construction is
+    several times faster than BaseModel. It still serializes and validates
+    cleanly as a field of the pydantic ``Trace`` model below.
+    """
+
+    layer: int
+    token_idx: int
+    expert_idx: int
+    gate_weight: float
+    output_norm: float = 0.0
 
 
 class Trace(BaseModel):
