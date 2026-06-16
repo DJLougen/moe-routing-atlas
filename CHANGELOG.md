@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-16
+
+### Added
+- **Appendable community trace files.** New tooling turns the JSONL trace format into a shared, append-only dataset that many people can grow safely:
+  - `moe-atlas merge FILES... -o OUT` combines trace files into one, validating and (by default) deduplicating records. The output may be one of the inputs, so a canonical community file can grow in place; the file is written atomically.
+  - `moe-atlas export --append FILE` appends the local database's traces to a shared JSONL file, skipping any already present.
+  - `moe-atlas validate FILES...` reports valid/duplicate/invalid records and exits non-zero on any invalid record (usable as a CI gate for trace pull requests).
+  - Library functions `trace_fingerprint`, `append_traces`, `merge_trace_files`, `validate_trace_file`, and `collect_traces` in `exporter`.
+- Traces are deduplicated by their routing data (model identity, input tokens, and expert activations) — independent of activation ordering, display name, timestamp, or backend-assigned id.
+
+### Changed
+- Malformed or schema-invalid records are skipped and counted during merge/append/validate, so a single bad contribution cannot corrupt a shared file.
+
 ## [0.3.0] - 2026-06-15
 
 ### Added
@@ -66,7 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Three.js 3D visualizer
 - Batch and single-text tracers for HuggingFace MoE models
 
-[Unreleased]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.1.0...v0.2.0

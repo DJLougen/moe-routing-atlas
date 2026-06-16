@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
-import orjson
+import os
+from collections.abc import Iterable
+from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
+import orjson
 import pandas as pd
 
 from .schema import Trace
@@ -58,10 +62,9 @@ def _import_payload_to_trace(data: dict) -> dict:
     return payload
 
 
-def export_traces(db_path: Path, output_dir: Path, fmt: str = "json") -> Path:
-    """Export all traces from SQLite database to a file."""
+def collect_traces(db_path: Path) -> list[dict]:
+    """Read every trace from the SQLite database as a shareable JSON payload."""
     import sqlite3
-    from datetime import datetime
     from itertools import groupby
 
     conn = sqlite3.connect(db_path)
@@ -92,10 +95,17 @@ def export_traces(db_path: Path, output_dir: Path, fmt: str = "json") -> Path:
     finally:
         conn.close()
 
-    traces = [
+    return [
         _db_row_to_trace_payload(dict(row), activations_by_trace.get(row["trace_id"], []))
         for row in trace_rows
     ]
+
+
+def export_traces(db_path: Path, output_dir: Path, fmt: str = "json") -> Path:
+    """Export all traces from SQLite database to a file."""
+    from datetime import datetime
+
+    traces = collect_traces(db_path)
 
     output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -163,3 +173,227 @@ def load_trace_from_file(path: str) -> dict:
 def save_trace_to_file(trace: dict, path: str) -> None:
     """Save a trace to a JSON file."""
     Path(path).write_bytes(orjson.dumps(trace, option=orjson.OPT_INDENT_2))
+
+
+def trace_fingerprint(trace: dict) -> str:
+    """Stable content hash identifying a trace by its routing data.
+
+    The fingerprint depends only on the model identity, input tokens, and the
+    set of expert activations (layer, token, expert, gate weight) -- not on
+    activation ordering, display name, timestamp, or backend-assigned id. Two
+    contributors who trace the same input through the same model therefore get
+    the same fingerprint, so identical traces deduplicate cleanly when merged
+    into a shared community file.
+    """
+    activations = sorted(
+        (
+            int(a["layer"]),
+            int(a["token_idx"]),
+            int(a["expert_idx"]),
+            float(a["gate_weight"]),
+        )
+        for a in trace.get("activations", [])
+    )
+    canonical = {
+        "model_id": trace.get("model_id") or trace.get("model_name") or "unknown",
+        "top_k": trace.get("top_k"),
+        "num_layers": trace.get("num_layers"),
+        "num_experts": trace.get("num_experts"),
+        "token_ids": list(trace.get("token_ids", [])),
+        "activations": activations,
+    }
+    return hashlib.sha256(orjson.dumps(canonical, option=orjson.OPT_SORT_KEYS)).hexdigest()
+
+
+@dataclass(slots=True)
+class MergeResult:
+    """Outcome of merging trace files into one shared file."""
+
+    output: Path
+    inputs: int
+    written: int
+    duplicates: int
+    invalid: int
+
+
+@dataclass(slots=True)
+class AppendResult:
+    """Outcome of appending traces to a shared file."""
+
+    path: Path
+    added: int
+    duplicates: int
+    invalid: int
+
+
+@dataclass(slots=True)
+class ValidationResult:
+    """Outcome of validating a trace file before sharing."""
+
+    path: Path
+    valid: int
+    duplicates: int
+    invalid: int
+    errors: list[str]
+
+
+def _read_trace_records(path: Path) -> tuple[list[dict], int]:
+    """Read raw trace dicts from a ``.json`` or ``.jsonl`` file.
+
+    Returns ``(records, malformed)`` where ``malformed`` counts JSONL lines that
+    are not valid JSON (or ``1`` for a corrupt ``.json`` file). Content errors
+    are never raised, so one bad line cannot abort a community merge.
+    """
+    path = Path(path)
+    malformed = 0
+    records: list[dict] = []
+    if path.suffix == ".jsonl":
+        with open(path, "rb") as handle:
+            for raw in handle:
+                line = raw.strip()
+                if not line:
+                    continue
+                try:
+                    records.append(orjson.loads(line))
+                except orjson.JSONDecodeError:
+                    malformed += 1
+    else:
+        try:
+            data = orjson.loads(path.read_bytes())
+        except orjson.JSONDecodeError:
+            return [], 1
+        if isinstance(data, dict) and "traces" in data:
+            records = list(data["traces"])
+        elif isinstance(data, list):
+            records = data
+        else:
+            records = [data]
+    return records, malformed
+
+
+def append_traces(traces: Iterable[dict], path: str | Path, dedup: bool = True) -> AppendResult:
+    """Append traces to a JSONL file, creating it (and parents) if needed.
+
+    Each trace is normalized and validated against the :class:`Trace` schema;
+    invalid traces are skipped and counted rather than written. With ``dedup``
+    (default), a trace whose routing data already appears in the file is skipped,
+    so re-running or re-contributing the same trace does not bloat the file.
+    """
+    path = Path(path)
+    seen: set[str] = set()
+    if dedup and path.exists():
+        existing, _ = _read_trace_records(path)
+        for record in existing:
+            try:
+                seen.add(trace_fingerprint(_import_payload_to_trace(record)))
+            except Exception:
+                continue
+
+    added = duplicates = invalid = 0
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "ab") as handle:
+        for trace in traces:
+            try:
+                payload = _import_payload_to_trace(trace)
+            except Exception:
+                invalid += 1
+                continue
+            if dedup:
+                fingerprint = trace_fingerprint(payload)
+                if fingerprint in seen:
+                    duplicates += 1
+                    continue
+                seen.add(fingerprint)
+            handle.write(orjson.dumps(payload))
+            handle.write(b"\n")
+            added += 1
+    return AppendResult(path=path, added=added, duplicates=duplicates, invalid=invalid)
+
+
+def merge_trace_files(
+    inputs: Iterable[str | Path], output: str | Path, dedup: bool = True
+) -> MergeResult:
+    """Merge several trace files into a single JSONL file.
+
+    Reads each input (``.json`` or ``.jsonl``), normalizes and validates every
+    record, and writes the result as JSONL. Invalid records are skipped and
+    counted so a single bad contribution cannot corrupt the shared file. With
+    ``dedup`` (default), traces with identical routing data are written once.
+
+    The output is written to a temporary file and atomically moved into place,
+    so ``output`` may also be one of the inputs -- letting you grow a canonical
+    community file in place (``merge community.jsonl new.jsonl -o community.jsonl``).
+    """
+    input_paths = [Path(p) for p in inputs]
+    output = Path(output)
+
+    seen: set[str] = set()
+    written = duplicates = invalid = 0
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    tmp = output.with_name(f".{output.name}.{os.getpid()}.tmp")
+    try:
+        with open(tmp, "wb") as handle:
+            for source in input_paths:
+                records, malformed = _read_trace_records(source)
+                invalid += malformed
+                for record in records:
+                    try:
+                        payload = _import_payload_to_trace(record)
+                    except Exception:
+                        invalid += 1
+                        continue
+                    if dedup:
+                        fingerprint = trace_fingerprint(payload)
+                        if fingerprint in seen:
+                            duplicates += 1
+                            continue
+                        seen.add(fingerprint)
+                    handle.write(orjson.dumps(payload))
+                    handle.write(b"\n")
+                    written += 1
+        os.replace(tmp, output)
+    finally:
+        if tmp.exists():
+            tmp.unlink()
+    return MergeResult(
+        output=output,
+        inputs=len(input_paths),
+        written=written,
+        duplicates=duplicates,
+        invalid=invalid,
+    )
+
+
+def validate_trace_file(path: str | Path) -> ValidationResult:
+    """Validate a trace file for sharing without modifying it.
+
+    Reports how many records are valid (unique), duplicated by routing data, and
+    invalid (malformed JSON or failing the :class:`Trace` schema), with a few
+    sample error messages. Useful before opening a community pull request.
+    """
+    path = Path(path)
+    records, malformed = _read_trace_records(path)
+    valid = duplicates = 0
+    invalid = malformed
+    errors: list[str] = []
+    if malformed:
+        errors.append(f"{malformed} line(s) were not valid JSON")
+    seen: set[str] = set()
+    for index, record in enumerate(records):
+        try:
+            payload = _import_payload_to_trace(record)
+        except Exception as exc:
+            invalid += 1
+            if len(errors) < 10:
+                errors.append(f"record {index}: {exc}")
+            continue
+        fingerprint = trace_fingerprint(payload)
+        if fingerprint in seen:
+            duplicates += 1
+        else:
+            seen.add(fingerprint)
+            valid += 1
+    return ValidationResult(
+        path=path, valid=valid, duplicates=duplicates, invalid=invalid, errors=errors
+    )

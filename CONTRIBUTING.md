@@ -148,6 +148,38 @@ To add support for a new MoE architecture:
 
 ---
 
+## Contributing Traces
+
+The atlas is most useful when the community pools routing traces. The JSONL trace file is
+**appendable** (one self-contained trace per line), and contributions are deduplicated and
+validated automatically.
+
+1. **Trace** one or more models locally:
+   ```bash
+   moe-atlas trace "your prompt" --model <moe-model-id>
+   ```
+
+2. **Append** your traces to a shared file (duplicates are skipped automatically):
+   ```bash
+   moe-atlas export --append community.jsonl
+   ```
+   To combine files from several people: `moe-atlas merge a.jsonl b.jsonl -o community.jsonl`.
+
+3. **Validate** before opening a pull request:
+   ```bash
+   moe-atlas validate community.jsonl
+   ```
+   `validate` exits non-zero if any record is malformed or fails the `Trace` schema, so it
+   doubles as a CI gate for trace pull requests.
+
+4. **Open a pull request** adding or updating the shared file. Keep prompts non-sensitive
+   and respect each model's license — traces store the input text alongside routing data.
+
+Traces are identified by their routing data (model + input tokens + expert activations), so
+re-tracing the same prompt never creates duplicates in the shared file.
+
+---
+
 ## Improving the Visualizer
 
 The visualizer is a standalone HTML file with embedded Three.js:

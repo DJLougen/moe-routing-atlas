@@ -186,9 +186,31 @@ def viz(backend, browser):
 @cli.command()
 @click.option("--dir", "-d", default=None, help="Export directory")
 @click.option("--format", "-f", default="json", type=click.Choice(["json", "jsonl", "parquet"]))
-def export(dir, format):
-    """Export all traces from the local database."""
+@click.option(
+    "--append",
+    "append_to",
+    default=None,
+    type=click.Path(),
+    help="Append traces to this JSONL file (deduplicated) instead of writing a new file",
+)
+def export(dir, format, append_to):
+    """Export all traces from the local database.
+
+    With --append FILE your traces are added to a shared community JSONL file,
+    skipping any whose routing data is already present.
+    """
     config = get_config()
+
+    if append_to:
+        from .exporter import append_traces, collect_traces
+
+        result = append_traces(collect_traces(config.db_path), append_to, dedup=True)
+        console.print(
+            f"[green]Appended {result.added} trace(s) to {result.path}[/green] "
+            f"[dim]({result.duplicates} duplicate, {result.invalid} invalid skipped)[/dim]"
+        )
+        return
+
     export_dir = Path(dir) if dir else config.export_dir
     export_dir.mkdir(parents=True, exist_ok=True)
 
@@ -201,6 +223,58 @@ def export(dir, format):
     )
 
     console.print(f"[green]Exported to {output_path}[/green]")
+
+
+@cli.command()
+@click.argument("input_files", nargs=-1, required=True, type=click.Path(exists=True))
+@click.option("--output", "-o", required=True, type=click.Path(), help="Combined output JSONL file")
+@click.option(
+    "--dedup/--no-dedup",
+    default=True,
+    help="Skip traces with identical routing data (default: on)",
+)
+def merge(input_files, output, dedup):
+    """Merge trace files into one shared JSONL file.
+
+    Example: moe-atlas merge traces1.jsonl traces2.jsonl --output combined.jsonl
+
+    Records are validated and (by default) deduplicated. The output may also be
+    one of the inputs, so a canonical community file can grow in place.
+    """
+    from .exporter import merge_trace_files
+
+    result = merge_trace_files(list(input_files), output, dedup=dedup)
+    console.print(
+        f"[green]Merged {result.inputs} file(s) -> {result.output}[/green]\n"
+        f"[dim]{result.written} written, {result.duplicates} duplicate, "
+        f"{result.invalid} invalid skipped[/dim]"
+    )
+
+
+@cli.command()
+@click.argument("input_files", nargs=-1, required=True, type=click.Path(exists=True))
+def validate(input_files):
+    """Validate trace file(s) before sharing or contributing.
+
+    Reports valid, duplicate, and invalid records per file, and exits non-zero
+    if any record is invalid -- handy in CI for community trace pull requests.
+    """
+    from .exporter import validate_trace_file
+
+    total_invalid = 0
+    for input_file in input_files:
+        result = validate_trace_file(input_file)
+        total_invalid += result.invalid
+        color = "red" if result.invalid else "green"
+        console.print(
+            f"[{color}]{result.path}[/{color}]: {result.valid} valid, "
+            f"{result.duplicates} duplicate, {result.invalid} invalid"
+        )
+        for err in result.errors:
+            console.print(f"  [dim]{err}[/dim]")
+
+    if total_invalid:
+        raise SystemExit(1)
 
 
 @cli.command()

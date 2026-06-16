@@ -207,6 +207,8 @@ moe-atlas --help
 | `viz` | Open visualizer in browser | `moe-atlas viz --browser` |
 | `export` | Export traces to file | `moe-atlas export --format jsonl` |
 | `import-traces` | Import traces from file | `moe-atlas import-traces traces.jsonl` |
+| `merge` | Combine trace files (deduplicated) | `moe-atlas merge a.jsonl b.jsonl -o all.jsonl` |
+| `validate` | Check a trace file before sharing | `moe-atlas validate traces.jsonl` |
 | `init` | Create config directory | `moe-atlas init` |
 | `config-show` | Show current config | `moe-atlas config-show` |
 
@@ -308,9 +310,37 @@ Traces are standard JSON/JSONL — no proprietary format:
 }
 ```
 
-**Future: File Combining**
+### Build a Community Trace Set
 
-We're working on a simpler way to combine trace files — `moe-atlas merge traces1.jsonl traces2.jsonl --output combined.jsonl`. For now, JSONL files can be concatenated directly: `cat traces1.jsonl traces2.jsonl > combined.jsonl`.
+Routing traces are most useful in bulk, so the JSONL format is **appendable** — one
+self-contained trace per line — and the CLI makes a shared file easy to grow safely.
+
+**Add your local traces to a shared file** (duplicates are skipped automatically):
+
+```bash
+moe-atlas export --append community.jsonl
+```
+
+**Combine files from several contributors** into one (deduplicated and validated):
+
+```bash
+moe-atlas merge community.jsonl alice.jsonl bob.jsonl --output community.jsonl
+```
+
+The output may also be one of the inputs, so a canonical file grows in place. Traces are
+deduplicated by their *routing data* (model + input tokens + expert activations), so the
+same prompt traced by two people is stored once — regardless of activation ordering,
+display name, or timestamp.
+
+**Validate before you share or open a pull request** (exits non-zero on bad records):
+
+```bash
+moe-atlas validate community.jsonl
+# community.jsonl: 1280 valid, 12 duplicate, 0 invalid
+```
+
+Malformed or schema-invalid records are reported and skipped during a merge, so one bad
+contribution can never corrupt the shared file.
 
 ---
 
@@ -496,7 +526,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
 ## Roadmap
 
 **Near term:**
-- [ ] `moe-atlas merge` command for combining trace files
+- [x] `moe-atlas merge` command for combining trace files (with `export --append` and `validate`)
 - [ ] Real-time tracing (watch routing as model generates)
 - [ ] Expert usage heatmap overlay
 - [ ] Export visualization as PNG/MP4
