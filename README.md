@@ -15,8 +15,11 @@ MoE models (like Mixtral, Qwen-MoE, Gemma-4) use sparse routing: for each token,
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI](https://img.shields.io/badge/pip-moe--atlas-blue)](https://pypi.org/project/moe-atlas/)
+[![Release](https://img.shields.io/badge/release-v0.4.0-22c55e)](https://github.com/DJLougen/moe-routing-atlas/releases/latest)
 
 See which experts activate for each token, layer by layer, in an interactive 3D visualization.
+
+> **New in v0.4.0 — community trace files.** Routing traces are an *appendable* shared dataset. Pool contributors' files with `moe-atlas merge`, grow a canonical file with `moe-atlas export --append`, and gate pull requests with `moe-atlas validate` — all content-deduplicated and schema-validated so one bad file can't corrupt the set. See [Build a Community Trace Set](#build-a-community-trace-set).
 
 ---
 
@@ -43,6 +46,7 @@ Every visual element is tied to **actual routing data** — nothing is decorativ
 - **Debug** MoE behavior layer-by-layer
 - **Share** routing maps with collaborators
 - **Research** population-level expert usage patterns
+- **Contribute** traces to a shared, deduplicated community dataset
 
 ---
 
