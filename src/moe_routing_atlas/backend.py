@@ -102,13 +102,15 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
         if request.url.path.startswith("/visualizer"):
+            # Allow inline module scripts + Three.js CDN (required for the visualizer)
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
-                "script-src 'self' https://cdn.jsdelivr.net; "
+                "script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; "
                 "style-src 'self' 'unsafe-inline'; "
-                "connect-src 'self'; "
-                "img-src 'self' data:;"
+                "connect-src 'self' https://cdn.jsdelivr.net; "
+                "img-src 'self' data: blob:;"
             )
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
         return response
 
 
@@ -217,6 +219,8 @@ def _normalize_trace_row(trace: dict[str, Any], *, include_text: bool = True) ->
         normalized["token_ids"] = token_ids
     if "activations" in trace:
         normalized["activations"] = trace["activations"]
+    if "moe_layers" in trace:
+        normalized["moe_layers"] = trace["moe_layers"]
     return normalized
 
 
@@ -228,16 +232,27 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
     def root():
         return {"message": "MoE Routing Atlas API", "version": __version__}
 
+    @app.get("/health")
+    def health():
+        conn = _connect_db(db_path)
+        try:
+            count = conn.execute("SELECT COUNT(*) FROM traces").fetchone()[0]
+        finally:
+            conn.close()
+        return {"status": "ok", "traces": count, "db": db_path}
+
     @app.get("/traces")
-    def list_traces(limit: int = 100):
+    def list_traces(limit: int = 100, order: str = "desc"):
         limit = max(1, min(limit, config.max_list_limit))
+        order_sql = "ASC" if order.lower() == "asc" else "DESC"
         conn = _connect_db(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         try:
             cursor.execute(
-                "SELECT trace_id, text, num_tokens, num_layers, num_experts, timestamp, model_name "
-                "FROM traces ORDER BY trace_id DESC LIMIT ?",
+                "SELECT trace_id, text, num_tokens, num_layers, num_experts, top_k, "
+                "timestamp, model_name "
+                f"FROM traces ORDER BY trace_id {order_sql} LIMIT ?",
                 (limit,),
             )
             traces = [
@@ -249,7 +264,7 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
             conn.close()
 
     @app.get("/trace/{trace_id}")
-    def get_trace(trace_id: int):
+    def get_trace(trace_id: int, token_idx: int | None = None):
         conn = _connect_db(db_path)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -263,6 +278,16 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
             try:
                 act_cursor = conn.cursor()
                 act_cursor.row_factory = None  # tuples beat sqlite3.Row for 100k+ rows
+                
+                act_sql = (
+                    "SELECT layer, token_idx, expert_idx, gate_weight "
+                    "FROM activations WHERE trace_id = ?"
+                )
+                act_params = [trace_id]
+                if token_idx is not None:
+                    act_sql += " AND token_idx = ?"
+                    act_params.append(token_idx)
+                    
                 trace["activations"] = [
                     {
                         "layer": row[0],
@@ -270,9 +295,14 @@ def _setup_routes(app: FastAPI, db_path: str) -> None:
                         "expert_idx": row[2],
                         "gate_weight": row[3],
                     }
+                    for row in act_cursor.execute(act_sql, act_params)
+                ]
+                
+                trace["moe_layers"] = [
+                    row[0]
                     for row in act_cursor.execute(
-                        "SELECT layer, token_idx, expert_idx, gate_weight "
-                        "FROM activations WHERE trace_id = ?",
+                        "SELECT DISTINCT layer FROM activations "
+                        "WHERE trace_id = ? ORDER BY layer",
                         (trace_id,),
                     ).fetchall()
                 ]

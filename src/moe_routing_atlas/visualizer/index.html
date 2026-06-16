@@ -10,26 +10,199 @@
         #canvas { display: block; width: 100vw; height: 100vh; }
 
         #ui {
-            position: absolute; top: 14px; left: 14px; width: 300px;
+            position: absolute; top: 14px; left: 14px; width: 340px;
             max-height: calc(100vh - 28px); overflow-y: auto;
-            background: rgba(10,10,26,0.92); border: 1px solid #2a2a4e;
+            background: rgba(10,10,26,0.94); border: 1px solid #2a2a4e;
             border-radius: 10px; padding: 14px; font-size: 11px;
+            z-index: 1000; pointer-events: auto;
         }
+        #status {
+            padding: 6px 8px; margin-bottom: 8px; border-radius: 4px;
+            background: #12122a; border: 1px solid #2a2a4e; font-size: 10px; color: #888;
+        }
+        #status.error { color: #ff6666; border-color: #663333; }
+        #status.ok { color: #66ffaa; border-color: #336655; }
         h1 { font-size: 15px; color: #0ff; margin-bottom: 2px; }
-        .subtitle { font-size: 9px; color: #555; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        .subtitle { font-size: 9px; color: #555; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; }
+        .arch-banner {
+            font-size: 9px; color: #8cf; margin-bottom: 8px; padding: 5px 7px;
+            background: #0a1428; border: 1px solid #2a4a6a; border-radius: 4px; line-height: 1.4;
+        }
+        .sparsity-panel {
+            margin-bottom: 8px; padding: 8px; background: #0a1020;
+            border: 1px solid #2a3a5a; border-radius: 6px; font-size: 9px;
+        }
+        .sparsity-panel h3 {
+            font-size: 9px; color: #fa0; text-transform: uppercase;
+            letter-spacing: 0.5px; margin-bottom: 6px;
+        }
+        .sparsity-row { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
+        .sparsity-row .lbl { min-width: 72px; color: #778; font-size: 8px; }
+        .sparsity-bar {
+            flex: 1; height: 8px; background: #141c30; border-radius: 4px; overflow: hidden;
+        }
+        .sparsity-bar .fill {
+            height: 100%; background: linear-gradient(90deg, #1a5a8a, #0cf);
+            border-radius: 4px; transition: width 0.35s ease;
+        }
+        .sparsity-bar .fill.token { background: linear-gradient(90deg, #a60, #fc0); }
+        .sparsity-val { min-width: 88px; text-align: right; color: #9cf; font-size: 8px; }
+        .sparsity-detail { color: #6a8; font-size: 8px; line-height: 1.45; margin-top: 4px; }
+        .section-label { font-size: 9px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; margin: 8px 0 4px; display: flex; justify-content: space-between; align-items: center; }
 
-        .trace-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 3px; max-height: 120px; overflow-y: auto; }
-        .trace-chip { background: #12122a; border: 1px solid #2a2a4e; border-radius: 3px; padding: 3px 4px; cursor: pointer; font-size: 9px; text-align: center; transition: all 0.15s; }
-        .trace-chip:hover { border-color: #0ff; background: #1a1a3a; }
-        .trace-chip.active { border-color: #0ff; background: #002244; }
+        /* Premium Search & Filter Controls */
+        .filter-container {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            margin-bottom: 8px;
+        }
+        .search-box {
+            background: #12122a;
+            border: 1px solid #2a2a4e;
+            border-radius: 4px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 10px;
+            padding: 5px 8px;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.20s ease;
+        }
+        .search-box:focus {
+            border-color: #0ff;
+        }
+        .model-filters {
+            display: flex;
+            gap: 4px;
+            flex-wrap: wrap;
+        }
+        .filter-chip {
+            background: rgba(42, 42, 78, 0.35);
+            border: 1px solid #2a2a4e;
+            border-radius: 3px;
+            color: #888;
+            cursor: pointer;
+            font-size: 8px;
+            padding: 2px 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.15s ease;
+        }
+        .filter-chip:hover {
+            border-color: #0ff;
+            color: #edf;
+        }
+        .filter-chip.active {
+            border-color: #0ff;
+            background: rgba(0, 255, 255, 0.12);
+            color: #0ff;
+            font-weight: 700;
+        }
 
-        .token-row { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; }
-        .tok { padding: 2px 5px; background: #181830; border-radius: 3px; font-family: monospace; font-size: 10px; cursor: pointer; border: 1px solid transparent; transition: all 0.15s; }
+        /* Trace selection metadata preview card block */
+        .trace-preview-card {
+            background: rgba(26, 42, 58, 0.3);
+            border: 1px solid rgba(0, 255, 255, 0.12);
+            border-radius: 6px;
+            padding: 7px 10px;
+            margin-bottom: 8px;
+            display: none;
+            font-size: 9.5px;
+            line-height: 1.4;
+            animation: pulse-border 1.5s infinite alternate;
+        }
+        .trace-preview-card .prev-model {
+            color: #0ff;
+            font-weight: 700;
+            font-family: monospace;
+            font-size: 9px;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+        }
+        .trace-preview-card .prev-meta {
+            color: #9cf;
+            font-size: 8px;
+            margin-bottom: 4px;
+        }
+        .trace-preview-card .prev-snippet {
+            color: #dfd;
+            font-style: italic;
+            border-left: 2px solid #0ff;
+            padding-left: 6px;
+            background: rgba(0,0,0,0.15);
+            padding: 4px 6px;
+            border-radius: 3px;
+        }
+
+        /* Intermediary Group containers for Model grouping */
+        .trace-group-header {
+            background: rgba(42, 42, 78, 0.20);
+            border-left: 2px solid #fa0;
+            color: #fa0;
+            font-size: 8px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            padding: 3px 6px;
+            margin: 6px 0 4px 0;
+            border-radius: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+        .trace-group-header::after {
+            content: '▼';
+            font-size: 7px;
+            transition: transform 0.2s ease;
+        }
+        .trace-group-header.collapsed::after {
+            transform: rotate(-90deg);
+        }
+        .trace-group-content {
+            transition: max-height 0.25s ease-out;
+            overflow: hidden;
+        }
+        .trace-group-content.collapsed {
+            display: none !important;
+        }
+
+        .trace-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; max-height: 140px; overflow-y: auto; }
+        .trace-chip { background: #12122a; border: 1px solid #2a2a4e; border-radius: 3px; padding: 4px 2px; cursor: pointer; font-size: 8.5px; text-align: center; color: #aaa; transition: all 0.15s ease; }
+        .trace-chip:hover { border-color: #0ff; background: #1a1a3a; color: #fff; transform: translateY(-0.5px); }
+        .trace-chip.active { border-color: #0ff; background: #002244; color: #0ff; font-weight: 700; box-shadow: 0 0 6px rgba(0,255,255,0.15); }
+
+        .nav-row { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+        .nav-row input[type=range] { flex: 1; accent-color: #0ff; }
+        .nav-row select { flex: 1; background: #12122a; color: #ccc; border: 1px solid #2a2a4e; border-radius: 4px; padding: 4px; font-size: 10px; }
+        .nav-btn { background: #1a2a3a; border: 1px solid #2a4a6a; color: #0ff; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 10px; font-weight: 700; }
+        .nav-btn:hover { background: #243850; }
+        .nav-label { font-size: 10px; color: #aaa; min-width: 72px; }
+
+        .token-row { display: flex; flex-wrap: wrap; gap: 3px; margin: 4px 0; max-height: 72px; overflow-y: auto; }
+        .tok { padding: 3px 6px; background: #181830; border-radius: 3px; font-family: monospace; font-size: 10px; cursor: pointer; border: 1px solid transparent; }
         .tok:hover { border-color: #4af; }
         .tok.active { border-color: #0ff; color: #0ff; background: #002244; }
 
+        .activation-list {
+            max-height: 180px; overflow-y: auto; margin: 4px 0;
+            border: 1px solid #2a2a4e; border-radius: 4px; background: #0c0c20;
+        }
+        .act-row {
+            display: grid; grid-template-columns: 36px 36px 44px 1fr 40px;
+            gap: 4px; padding: 4px 6px; font-size: 9px; cursor: pointer;
+            border-bottom: 1px solid #1a1a30; align-items: center;
+        }
+        .act-row:hover { background: #141430; }
+        .act-row.active { background: #002244; border-left: 2px solid #0ff; }
+        .act-row .gate { color: #ff9800; font-weight: 600; text-align: right; }
+        .act-header { color: #555; font-weight: 700; cursor: default; }
+        .act-header:hover { background: transparent; }
+
         .btn-row { display: flex; gap: 4px; margin: 6px 0; }
-        button { flex: 1; background: #0088aa; border: none; padding: 5px; border-radius: 4px; color: #fff; font-weight: 700; font-size: 10px; cursor: pointer; transition: background 0.15s; }
+        button { flex: 1; background: #0088aa; border: none; padding: 5px; border-radius: 4px; color: #fff; font-weight: 700; font-size: 10px; cursor: pointer; }
         button:hover { background: #00bbdd; }
         button.off { background: #1a1a30; color: #666; }
 
@@ -37,501 +210,122 @@
         .info .label { color: #888; }
         .info .hl { color: #ff9800; font-weight: 600; }
 
-        .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; font-size: 9px; color: #888; }
-        .legend-item { display: flex; align-items: center; gap: 3px; }
-        .dot { width: 7px; height: 7px; border-radius: 2px; }
+        .warn { font-size: 9px; color: #ff9800; margin: 4px 0; }
+        .guide {
+            margin-top: 8px; padding: 8px; background: #0a1020; border: 1px solid #2a3a5a;
+            border-radius: 6px; font-size: 9px; line-height: 1.55; color: #99aabb;
+        }
+        .guide h3 { font-size: 9px; color: #0ff; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+        .guide p { margin-bottom: 6px; }
+        .guide p:last-child { margin-bottom: 0; }
+        .guide b { color: #cce; font-weight: 600; }
+        .guide .cyan { color: #5ef; }
+        .guide .orange { color: #fa0; }
+        .guide .beam { color: #6fd; }
+
+        .scene-label {
+            font: 10px/1.35 ui-monospace, Consolas, monospace;
+            color: #e8f4ff; background: rgba(6, 12, 28, 0.88);
+            border: 1px solid #3a5a8a; border-radius: 4px; padding: 4px 7px;
+            white-space: pre; pointer-events: none; text-align: center;
+            box-shadow: 0 0 12px rgba(0, 80, 120, 0.35);
+        }
+        .scene-label.router { border-color: #0aa; color: #8ef; }
+        .scene-label.experts { border-color: #a60; color: #fc8; }
+        .scene-label.depth { border-color: #456; color: #9ab; font-size: 9px; }
+        .scene-label.layer-idx { font-size: 8px; padding: 2px 5px; color: #6a8; border-color: #345; background: rgba(4,8,16,0.75); }
+
+        #hud .webgpu { color: #0ff; font-weight: 700; }
     </style>
 </head>
 <body>
     <canvas id="canvas"></canvas>
     <div id="ui">
         <h1>MoE Routing Atlas</h1>
-        <div class="subtitle">Architecture Lattice</div>
+        <div class="subtitle">Activation Explorer</div>
+        <div id="arch-banner" class="arch-banner">—</div>
+        <div class="sparsity-panel" id="sparsity-panel">
+            <h3>Active parameters (MoE sparsity)</h3>
+            <div class="sparsity-row">
+                <span class="lbl">Model nominal</span>
+                <div class="sparsity-bar"><div id="bar-nominal" class="fill" style="width:0%"></div></div>
+                <span class="sparsity-val" id="nominal-label">—</span>
+            </div>
+            <div class="sparsity-row">
+                <span class="lbl">This token</span>
+                <div class="sparsity-bar"><div id="bar-token" class="fill token" style="width:0%"></div></div>
+                <span class="sparsity-val" id="token-sparse-label">—</span>
+            </div>
+            <div class="sparsity-detail" id="expert-util-label">8/256 experts per MoE layer when routed</div>
+        </div>
+        <div id="status">Loading traces…</div>
+        <div class="section-label">Traces — click to load</div>
+        <div class="filter-container">
+            <input type="text" class="search-box" id="trace-search" placeholder="Search prompt text, token, or ID...">
+            <div class="model-filters" id="model-filters">
+                <span class="filter-chip active" data-model="all">All Models</span>
+                <span class="filter-chip" data-model="Qwen3.6-35B-A3B">Qwen 3.6</span>
+                <span class="filter-chip" data-model="Qwen3.5-35B-A3B">Qwen 3.5</span>
+            </div>
+        </div>
+        <div class="trace-preview-card" id="trace-preview-card">
+            <div class="prev-model" id="prev-model">QWEN3.6-35B-A3B</div>
+            <div class="prev-meta" id="prev-meta">Trace #2009 · 256E · 82 tokens</div>
+            <div class="prev-snippet" id="prev-snippet">"The quick brown fox jumps over..."</div>
+        </div>
         <div class="trace-grid" id="traces"></div>
-        <div id="controls" style="display:none">
+        <div id="controls">
+            <div class="section-label">Token</div>
+            <div class="nav-row">
+                <button class="nav-btn" id="tok-prev">◀</button>
+                <input type="range" id="tok-slider" min="0" max="0" value="0">
+                <button class="nav-btn" id="tok-next">▶</button>
+            </div>
+            <div class="token-row" id="tokens"></div>
+
+            <div class="section-label">Layer filter</div>
+            <div class="nav-row">
+                <select id="layer-filter">
+                    <option value="all">All layers</option>
+                </select>
+            </div>
+
+            <div class="section-label">Activations <span id="act-count" style="color:#0ff"></span></div>
+            <div class="activation-list" id="activation-list"></div>
+            <div id="expert-warn" class="warn" style="display:none"></div>
+
             <div class="btn-row">
                 <button id="play">Play</button>
                 <button id="pause" class="off">Pause</button>
                 <button id="reset" class="off">Reset</button>
                 <button id="rotate" class="off">Rotate</button>
             </div>
-            <div class="token-row" id="tokens"></div>
+            <div class="section-label">Activation speed</div>
+            <div class="nav-row">
+                <span class="nav-label" style="min-width:28px">0.25×</span>
+                <input type="range" id="speed-slider" min="0.25" max="4" step="0.25" value="1">
+                <span id="speed-label" class="nav-label" style="min-width:36px;text-align:right;color:#0ff">1.0×</span>
+            </div>
             <div class="info" id="info"></div>
-            <div class="legend">
-                <div class="legend-item"><div class="dot" style="background:#4fc3f7"></div>Attention</div>
-                <div class="legend-item"><div class="dot" style="background:#555"></div>Norm</div>
-                <div class="legend-item"><div class="dot" style="background:#0ff"></div>Router</div>
-                <div class="legend-item"><div class="dot" style="background:#2a4a6a"></div>Expert</div>
-                <div class="legend-item"><div class="dot" style="background:#ff9800"></div>Active</div>
-                <div class="legend-item"><div class="dot" style="background:#ff5555"></div>Skip</div>
-                <div class="legend-item"><div class="dot" style="background:#44ff88"></div>Flow</div>
+            <div class="guide">
+                <h3>How to read the 3D view</h3>
+                <p><b class="orange">Glowing neurons</b> = routed experts (electric cyan→gold). <b>Purple ghosts</b> = dormant slots in the lattice.</p>
+                <p><b>Bright hubs</b> = synaptic clusters per layer. <b>Electric arcs</b> connect them through depth.</p>
+                <p><b>Layer filter</b> = inspect one layer's dendrite spokes (router→expert).</p>
+                <p><b class="orange">Sparsity bars</b> = nominal <b>3B / 35B</b> active params (A3B) vs this token's routed expert fraction (<b>8/256</b> per layer).</p>
             </div>
         </div>
     </div>
 
-    <!-- Three.js pinned to 0.160.0; CSP enforced by backend SecurityHeadersMiddleware -->
     <script type="importmap">
-    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js", "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/" } }
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/"
+        }
+    }
     </script>
-
-    <script type="module">
-        import * as THREE from 'three';
-        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-
-        const canvas = document.getElementById('canvas');
-        const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.setClearColor(0x0a0a1a);
-
-        const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x0a0a1a, 0.005);
-
-        const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 1, 400);
-        camera.position.set(60, 45, -40);
-
-        // Post-processing setup for bloom effect
-        const composer = new EffectComposer(renderer);
-        const renderPass = new RenderPass(scene, camera);
-        composer.addPass(renderPass);
-
-        const bloomPass = new UnrealBloomPass(
-            new THREE.Vector2(window.innerWidth, window.innerHeight),
-            1.0,  // strength
-            0.4,  // radius
-            0.85  // threshold
-        );
-        composer.addPass(bloomPass);
-
-        const controls = new OrbitControls(camera, canvas);
-        controls.enableDamping = true;
-        controls.autoRotate = false;
-        controls.autoRotateSpeed = 0.4;
-        controls.target.set(0, 10, 55);
-
-        // ── Lighting (much brighter) ──
-        scene.add(new THREE.AmbientLight(0xccccee, 0.8));
-        
-        // 3-point lighting for depth and visual richness
-        const keyLight = new THREE.DirectionalLight(0xffe8d0, 1.2);
-        keyLight.position.set(50, 80, 30);
-        scene.add(keyLight);
-        
-        const fillLight = new THREE.DirectionalLight(0x4080ff, 0.6);
-        fillLight.position.set(-40, 20, -30);
-        scene.add(fillLight);
-        
-        const rimLight = new THREE.DirectionalLight(0x00f5ff, 0.8);
-        rimLight.position.set(0, -20, 60);
-        scene.add(rimLight);
-
-        const hemi = new THREE.HemisphereLight(0x88aaff, 0x443322, 0.5);
-        scene.add(hemi);
-
-        const dl1 = new THREE.DirectionalLight(0xffffff, 1.0);
-        dl1.position.set(30, 60, 40);
-        scene.add(dl1);
-
-        const dl2 = new THREE.DirectionalLight(0xffcc88, 0.4);
-        dl2.position.set(-25, 40, -20);
-        scene.add(dl2);
-
-        const dl3 = new THREE.DirectionalLight(0x88aaff, 0.3);
-        dl3.position.set(0, -20, 30);
-        scene.add(dl3);
-
-        // ── State ──
-        let traceData = null, currentToken = 0, isPlaying = false, tick = 0, animSpeed = 1;
-
-        // ── Palette ──
-        const C_ATTN  = new THREE.Color(0x4fc3f7);
-        const C_NORM  = new THREE.Color(0x555566);
-        const C_ROUT  = new THREE.Color(0x00d4ff);
-        const C_EXPT  = new THREE.Color(0x2a4a6a);
-        const C_DIM   = new THREE.Color(0x111122);
-        const C_ACTV  = new THREE.Color(0xff9800);
-        const C_HOT   = new THREE.Color(0xffeb3b);
-        const C_BEAM  = new THREE.Color(0x0088aa);
-        const C_FLOW  = new THREE.Color(0x44ff88);
-
-        // ── Mesh refs ──
-        let expertsInst = null, routInst = null;
-        let beamMesh = null, crossMesh = null, pulsePts = null;
-        let architectureStaticMeshes = [];
-
-        function escapeHtml(value) {
-            return String(value)
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#39;');
-        }
-
-        function normalizeTrace(data) {
-            data.token_strs = data.token_strs || data.tokens || [];
-            data.token_ids = data.token_ids || [];
-            data.id = data.id ?? data.trace_id;
-            return data;
-        }
-
-        function setInfoPanel(tidx, tok, acts, activeLayers, maxGate, connections) {
-            const info = document.getElementById('info');
-            info.textContent = '';
-            const addLine = (label, value, highlight) => {
-                const line = document.createElement('div');
-                const labelEl = document.createElement('span');
-                labelEl.className = 'label';
-                labelEl.textContent = label + ': ';
-                const valueEl = document.createElement('span');
-                valueEl.className = highlight ? 'hl' : '';
-                valueEl.textContent = value;
-                line.appendChild(labelEl);
-                line.appendChild(valueEl);
-                info.appendChild(line);
-            };
-            addLine('Token', '"' + tok + '" (#' + tidx + ')', true);
-            addLine('Activations', String(acts.length) + ' across ' + activeLayers + ' layers', true);
-            addLine('Max gate', maxGate, true);
-            addLine('Cross-layer flow', String(connections) + ' connections', true);
-        }
-
-        const dummy = new THREE.Object3D();
-
-        const COLS = 10, ROWS = 6, GAP = 1.6, LAYER_GAP = 5.5, Y0 = 2;
-
-        function layerY(l) { return Y0 + 8; }
-        function layerZ(l) { return l * LAYER_GAP; }
-
-        function buildArchitecture(L, K, topK) {
-            [expertsInst, routInst, beamMesh, crossMesh, pulsePts, ...architectureStaticMeshes].forEach(m => {
-                if (m) { scene.remove(m); m.geometry?.dispose?.(); m.material?.dispose?.(); }
-            });
-            architectureStaticMeshes = [];
-
-            const eK = Math.min(K, 60);
-
-            // ── Experts: small cubes in a 10x6 grid ──
-            const eGeo = new THREE.IcosahedronGeometry(0.4, 1);
-            const eMat = new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.4, roughness: 0.5, emissive: new THREE.Color(0x111118), emissiveIntensity: 0.5 });
-            expertsInst = new THREE.InstancedMesh(eGeo, eMat, L * eK);
-            for (let l = 0; l < L; l++) {
-                for (let e = 0; e < eK; e++) {
-                    const row = Math.floor(e / COLS);
-                    const col = e % COLS;
-                    dummy.position.set(
-                        (col - COLS/2 + 0.5) * GAP,
-                        Y0 + 3 + (row - ROWS/2 + 0.5) * GAP,
-                        layerZ(l)
-                    );
-                    dummy.scale.set(1,1,1);
-                    dummy.rotation.set(0,0,0);
-                    dummy.updateMatrix();
-                    expertsInst.setMatrixAt(l * eK + e, dummy.matrix);
-                    expertsInst.setColorAt(l * eK + e, C_DIM);
-                }
-            }
-            expertsInst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-            scene.add(expertsInst);
-
-
-
-            // ── Routers: small dodecahedrons (not big balls!) ──
-            const rGeo = new THREE.DodecahedronGeometry(0.45, 0);
-            const rMat = new THREE.MeshStandardMaterial({ color: 0x000000, metalness: 0.0, roughness: 1.0 });
-            routInst = new THREE.InstancedMesh(rGeo, rMat, L);
-            for (let l = 0; l < L; l++) {
-                dummy.position.set(-0.3, Y0 + 8, layerZ(l));
-                dummy.scale.set(1,1,1);
-                dummy.rotation.set(0,0,0);
-                dummy.updateMatrix();
-                routInst.setMatrixAt(l, dummy.matrix);
-                routInst.setColorAt(l, new THREE.Color(0x111111));
-            }
-            scene.add(routInst);
-
-            // ── Static backbone lines (Attn→Norm→Router) ──
-            const staticPts = [];
-            for (let l = 0; l < L; l++) {
-                const z = layerZ(l), y = Y0 + 8;
-                // Attn → Norm
-                staticPts.push(-8, y, z, -4, y, z);
-                // Norm → Router
-                staticPts.push(-4, y, z, -0.3, y, z);
-                // Router → Expert grid edge
-                staticPts.push(-0.3, y, z, -COLS*GAP/2, y - 3, z);
-                staticPts.push(-0.3, y, z, COLS*GAP/2, y - 3, z);
-            }
-            const sBG = new THREE.BufferGeometry();
-            sBG.setAttribute('position', new THREE.Float32BufferAttribute(staticPts, 3));
-            const sBM = new THREE.LineBasicMaterial({ color: 0x334455, transparent: true, opacity: 0.4 });
-            architectureStaticMeshes.push(new THREE.LineSegments(sBG, sBM));
-            scene.add(architectureStaticMeshes[architectureStaticMeshes.length - 1]);
-
-            // ── Inter-layer vertical beams ──
-            const vPts = [];
-            for (let l = 0; l < L - 1; l++) {
-                const z0 = layerZ(l), z1 = layerZ(l+1), y = Y0 + 8;
-                vPts.push(-8, y, z0, -8, y, z1);
-                vPts.push(-0.3, y, z0, -0.3, y, z1);
-            }
-            const vBG = new THREE.BufferGeometry();
-            vBG.setAttribute('position', new THREE.Float32BufferAttribute(vPts, 3));
-            const vBM = new THREE.LineBasicMaterial({ color: 0x223344, transparent: true, opacity: 0.3 });
-            architectureStaticMeshes.push(new THREE.LineSegments(vBG, vBM));
-            scene.add(architectureStaticMeshes[architectureStaticMeshes.length - 1]);
-
-            // ── Dynamic: Router→Expert beams ──
-            const bGeo = new THREE.BufferGeometry();
-            bGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(300 * 2 * 3), 3));
-            beamMesh = new THREE.LineSegments(bGeo, new THREE.LineBasicMaterial({ color: C_BEAM, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
-            beamMesh.frustumCulled = false;
-            scene.add(beamMesh);
-
-            // ── Dynamic: Cross-layer expert flow ──
-            const cGeo = new THREE.BufferGeometry();
-            cGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(600 * 2 * 3), 3));
-            crossMesh = new THREE.LineSegments(cGeo, new THREE.LineBasicMaterial({ color: C_FLOW, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending }));
-            crossMesh.frustumCulled = false;
-            scene.add(crossMesh);
-
-
-            // ── Token pulse particles ──
-            const pGeo = new THREE.BufferGeometry();
-            pGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(200*3), 3));
-            pGeo.setAttribute('size', new THREE.BufferAttribute(new Float32Array(200), 1));
-            const pMat = new THREE.ShaderMaterial({
-                transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-                vertexShader: 'attribute float size; varying float vA; void main(){ vA=size>0.?1.:0.; vec4 m=modelViewMatrix*vec4(position,1.); gl_PointSize=size*(180./-m.z); gl_Position=projectionMatrix*m; }',
-                fragmentShader: 'varying float vA; void main(){ float d=length(gl_PointCoord-vec2(.5)); if(d>.5||vA<.5)discard; gl_FragColor=vec4(0.,.9,1.,smoothstep(.5,0.,d)); }'
-            });
-            pulsePts = new THREE.Points(pGeo, pMat);
-            scene.add(pulsePts);
-        }
-
-        function expertPos(layer, expert) {
-            const row = Math.floor(expert / COLS);
-            const col = expert % COLS;
-            return [
-                (col - COLS/2 + 0.5) * GAP,
-                Y0 + 3 + (row - ROWS/2 + 0.5) * GAP,
-                layerZ(layer)
-            ];
-        }
-
-        // ── Highlight Token ──
-        function highlightToken(tidx) {
-            if (!traceData || !expertsInst) return;
-            const L = traceData.num_layers;
-            const K = Math.min(traceData.num_experts, 60);
-
-            // Reset experts to dim
-            for (let i = 0; i < L*K; i++) expertsInst.setColorAt(i, C_DIM);
-
-            // Reset attention & norm to default
-            if (routInst) for (let l = 0; l < L; l++) routInst.setColorAt(l, new THREE.Color(0x111111));
-
-            const acts = traceData.activations.filter(a => a.token_idx === tidx && a.expert_idx < K);
-
-            // Beam positions (router→expert)
-            const beamPos = beamMesh.geometry.attributes.position.array;
-            let bi = 0;
-
-            // Cross-layer positions
-            const crossPos = crossMesh.geometry.attributes.position.array;
-            let ci = 0;
-
-            // Pulse particles
-            const pp = pulsePts.geometry.attributes.position.array;
-            const ps = pulsePts.geometry.attributes.size.array;
-            let pi = 0;
-
-            const activeByLayer = {};
-
-            acts.forEach(a => {
-                const ni = a.layer * K + a.expert_idx;
-                const t = Math.min(a.gate_weight, 1);
-                const c = new THREE.Color().lerpColors(C_EXPT, C_ACTV, t);
-                if (t > 0.6) c.lerp(C_HOT, (t - 0.6) * 2.5);
-                expertsInst.setColorAt(ni, c);
-                // Light up the router nodes for active layers
-                if (routInst) {
-                    routInst.setColorAt(a.layer, new THREE.Color(0x66ffff));
-                }
-
-                const [ex, ey, ez] = expertPos(a.layer, a.expert_idx);
-
-                // Router→Expert beam
-                if (bi < 300*2*3) {
-                    beamPos[bi++] = -0.3; beamPos[bi++] = Y0+8; beamPos[bi++] = ez;
-                    beamPos[bi++] = ex; beamPos[bi++] = ey; beamPos[bi++] = ez;
-                }
-
-                // Pulse at expert position
-                if (pi < 200) {
-                    pp[pi*3] = ex; pp[pi*3+1] = ey; pp[pi*3+2] = ez;
-                    ps[pi] = 2 + t * 6;
-                    pi++;
-                }
-
-                // Track active experts per layer
-                if (!activeByLayer[a.layer]) activeByLayer[a.layer] = [];
-                activeByLayer[a.layer].push({idx: a.expert_idx, pos: [ex, ey, ez], gate: a.gate_weight});
-            });
-
-            // Cross-layer flow: connect active experts in layer L to layer L+1
-            const layers = Object.keys(activeByLayer).map(Number).sort((a,b) => a-b);
-            for (let li = 0; li < layers.length - 1; li++) {
-                const layerA = layers[li];
-                const layerB = layerA + 1; // adjacent layer
-                const expertsA = activeByLayer[layerA];
-                const expertsB = activeByLayer[layerB];
-                if (!expertsB) continue;
-
-                for (const ea of expertsA) {
-                    for (const eb of expertsB) {
-                        if (ci < 600*2*3) {
-                            crossPos[ci++] = ea.pos[0]; crossPos[ci++] = ea.pos[1]; crossPos[ci++] = ea.pos[2];
-                            crossPos[ci++] = eb.pos[0]; crossPos[ci++] = eb.pos[1]; crossPos[ci++] = eb.pos[2];
-                        }
-                    }
-                }
-            }
-
-            // Zero unused
-            for (let i = bi; i < beamPos.length; i++) beamPos[i] = 0;
-            for (let i = ci; i < crossPos.length; i++) crossPos[i] = 0;
-            for (let i = pi; i < 200; i++) ps[i] = 0;
-
-            beamMesh.geometry.attributes.position.needsUpdate = true;
-            crossMesh.geometry.attributes.position.needsUpdate = true;
-            expertsInst.instanceColor.needsUpdate = true;
-            if (routInst) routInst.instanceColor.needsUpdate = true;
-            pulsePts.geometry.attributes.position.needsUpdate = true;
-            pulsePts.geometry.attributes.size.needsUpdate = true;
-
-            // UI
-            const tok = traceData.token_strs[tidx] || '?';
-            const maxGate = acts.length ? Math.max(...acts.map(a=>a.gate_weight)).toFixed(3) : '-';
-            const activeLayers = Object.keys(activeByLayer).length;
-            window.activeLayerSet = new Set(Object.keys(activeByLayer).map(Number));
-            setInfoPanel(tidx, tok, acts, activeLayers, maxGate, ci / 6 | 0);
-            document.querySelectorAll('.tok').forEach((el,i) => el.classList.toggle('active', i===tidx));
-        }
-
-        // ── Animate ──
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            tick++;
-            const t = tick * 0.04;
-
-            // Router spin - only active layers rotate
-            if (routInst && window.activeLayerSet) {
-                for (let l = 0; l < routInst.count; l++) {
-                    dummy.position.set(-0.3, Y0+8, l * LAYER_GAP);
-                    if (window.activeLayerSet.has(l)) {
-                        dummy.rotation.set(0, t * 0.5 + l * 0.3, 0);
-                        dummy.scale.set(1.15, 1.15, 1.15);
-                    } else {
-                        dummy.rotation.set(0, l * 0.3, 0);
-                        dummy.scale.set(1, 1, 1);
-                    }
-                    dummy.updateMatrix();
-                    routInst.setMatrixAt(l, dummy.matrix);
-                }
-                routInst.instanceMatrix.needsUpdate = true;
-            }
-
-            // Particle oscillation
-            if (pulsePts) {
-                const ps = pulsePts.geometry.attributes.size.array;
-                for (let i = 0; i < 200; i++) {
-                    if (ps[i] > 0) ps[i] *= 0.94 + 0.06 * Math.sin(t * 3 + i);
-                }
-                pulsePts.geometry.attributes.size.needsUpdate = true;
-            }
-
-            // Auto-play
-            if (isPlaying && traceData && tick % Math.max(1, Math.floor(18/animSpeed)) === 0) {
-                currentToken = (currentToken + 1) % traceData.token_ids.length;
-                highlightToken(currentToken);
-            }
-
-            composer.render();
-        }
-
-        // ── Load / Fetch ──
-        async function loadTrace(id) {
-            try {
-                const r = await fetch('/trace/' + id);
-                if (!r.ok) throw new Error('Trace ' + id + ' not found');
-                traceData = normalizeTrace(await r.json());
-                buildArchitecture(traceData.num_layers, Math.min(traceData.num_experts, 60), traceData.top_k);
-
-                const bar = document.getElementById('tokens');
-                bar.innerHTML = '';
-                traceData.token_strs.forEach((tok, i) => {
-                    const el = document.createElement('div');
-                    el.className = 'tok';
-                    el.textContent = tok || '.';
-                    el.onclick = () => { currentToken = i; highlightToken(i); };
-                    bar.appendChild(el);
-                });
-                currentToken = 0;
-                highlightToken(0);
-                document.getElementById('controls').style.display = 'block';
-                document.querySelectorAll('.trace-chip').forEach(c => c.classList.toggle('active', parseInt(c.dataset.id) === id));
-            } catch (e) { console.error(e); }
-        }
-
-        async function fetchTraces() {
-            const grid = document.getElementById('traces');
-            try {
-                const r = await fetch('/traces?limit=24');
-                if (!r.ok) throw new Error('Failed to load traces');
-                const traces = await r.json();
-                grid.innerHTML = '';
-                traces.forEach(t => {
-                    const traceId = t.id ?? t.trace_id;
-                    const el = document.createElement('div');
-                    el.className = 'trace-chip';
-                    el.dataset.id = traceId;
-                    el.textContent = '#' + traceId;
-                    el.title = (t.model_name || 'trace') + ' · ' + (t.num_tokens ?? '?') + ' tokens';
-                    el.onclick = () => loadTrace(traceId);
-                    grid.appendChild(el);
-                });
-            } catch (e) {
-                grid.textContent = '';
-                const err = document.createElement('div');
-                err.style.color = '#555';
-                err.style.fontSize = '9px';
-                err.textContent = 'No backend';
-                grid.appendChild(err);
-            }
-        }
-
-        window.fetchTraces = fetchTraces;
-
-        // UI handlers
-        document.getElementById('play').onclick = () => { isPlaying = true; controls.autoRotate = false; };
-        document.getElementById('pause').onclick = () => { isPlaying = false; };
-        document.getElementById('reset').onclick = () => { isPlaying = false; currentToken = 0; controls.autoRotate = false; highlightToken(0); };
-        document.getElementById('rotate').onclick = () => { controls.autoRotate = !controls.autoRotate; };
-
-        fetchTraces();
-        animate();
-        
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
+    <script src="bootstrap.js?v=4"></script>
+    <script type="module" src="viz.js?v=9"></script>
 </body>
 </html>

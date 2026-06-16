@@ -1,5 +1,7 @@
 """MoE Atlas CLI — command-line interface for the routing atlas toolkit."""
 
+import os
+import sys
 import webbrowser
 from pathlib import Path
 
@@ -37,23 +39,80 @@ def cli():
 @click.option("--port", default=None, type=int, help="Server port (default: 8000)")
 @click.option("--db", default=None, help="SQLite database path")
 @click.option("--reload", is_flag=True, help="Enable auto-reload (dev only)")
-def serve(host, port, db, reload):
+@click.option("--no-browser", is_flag=True, help="Do not open the visualizer in a browser")
+def serve(host, port, db, reload, no_browser):
     """Start the visualization backend server."""
     _banner()
     config = get_config()
 
     host = host or config.backend_host
     port = port or config.backend_port
-    db_path = db or str(config.db_path)
+    db_path = str(Path(db).resolve()) if db else str(config.db_path.resolve())
 
     console.print(f"[green]Starting backend server on http://{host}:{port}[/green]")
-    console.print(f"[dim]Database: {db_path}[/dim]\n")
+    console.print(f"[dim]Database: {db_path}[/dim]")
+    console.print(f"[dim]Visualizer: http://{host}:{port}/visualizer/[/dim]\n")
 
-    from .backend import create_app
     import uvicorn
 
-    app = create_app(db_path=db_path)
-    uvicorn.run(app, host=host, port=port, reload=reload)
+    if not no_browser:
+        webbrowser.open(f"http://{host}:{port}/visualizer/")
+
+    if reload:
+        os.environ["MOE_ATLAS_DB_PATH"] = db_path
+        uvicorn.run(
+            "moe_routing_atlas.asgi:app",
+            host=host,
+            port=port,
+            reload=True,
+            reload_dirs=["src"],
+        )
+    else:
+        from .backend import create_app
+
+        app = create_app(db_path=db_path)
+        uvicorn.run(app, host=host, port=port)
+
+
+@cli.command()
+@click.option("--port", default=8777, type=int, help="Dev server port (default: 8777)")
+@click.option("--no-browser", is_flag=True, help="Do not open the visualizer in a browser")
+def dev(port, no_browser):
+    """Start dev server with hot reload (prefers qwen35b.db, else dev.db)."""
+    _banner()
+    root = Path(__file__).resolve().parents[2]
+    qwen_db = root / "qwen35b.db"
+    db_path = qwen_db if qwen_db.exists() else root / "dev.db"
+    seed_script = root / "scripts" / "seed_from_dynareap.py"
+
+    if not db_path.exists() and seed_script.exists():
+        console.print("[cyan]Seeding dev.db from dynaREAP...[/cyan]")
+        import subprocess
+
+        subprocess.run([sys.executable, str(seed_script)], check=True)
+
+    os.environ["MOE_ATLAS_DB_PATH"] = str(db_path)
+    host = "127.0.0.1"
+    origins = (
+        f"http://{host}:{port},http://localhost:{port},"
+        f"http://127.0.0.1:8000,http://localhost:8000"
+    )
+    os.environ["MOE_ATLAS_CORS_ORIGINS"] = origins
+    console.print(f"[green]Dev server: http://{host}:{port}/visualizer/[/green]")
+    console.print(f"[dim]Database: {db_path}[/dim]\n")
+
+    if not no_browser:
+        webbrowser.open(f"http://{host}:{port}/visualizer/")
+
+    import uvicorn
+
+    uvicorn.run(
+        "moe_routing_atlas.asgi:app",
+        host=host,
+        port=port,
+        reload=True,
+        reload_dirs=["src"],
+    )
 
 
 @cli.command()
@@ -223,6 +282,42 @@ def export(dir, format, append_to):
     )
 
     console.print(f"[green]Exported to {output_path}[/green]")
+
+
+@cli.command("import-parquet")
+@click.option(
+    "--metadata", "-m", type=click.Path(exists=True), required=True,
+    help="traces_metadata.parquet",
+)
+@click.option(
+    "--activations", "-a", type=click.Path(exists=True), required=True,
+    help="activations_all.parquet",
+)
+@click.option("--db", type=click.Path(), default=None, help="Output SQLite DB (default: ./qwen35b.db)")
+@click.option("--limit", type=int, default=None, help="Import first N traces only")
+@click.option("--replace", is_flag=True, help="Replace existing database")
+def import_parquet(metadata, activations, db, limit, replace):
+    """Import traces from paired parquet files into SQLite."""
+    import subprocess
+
+    root = Path(__file__).resolve().parents[2]
+    script = root / "scripts" / "import_parquet_traces.py"
+    out_db = Path(db) if db else root / "qwen35b.db"
+
+    cmd = [
+        sys.executable, str(script),
+        "--metadata", str(metadata),
+        "--activations", str(activations),
+        "--db", str(out_db),
+    ]
+    if limit is not None:
+        cmd.extend(["--limit", str(limit)])
+    if replace:
+        cmd.append("--replace")
+
+    subprocess.run(cmd, check=True)
+    console.print(f"[green]Parquet import complete → {out_db}[/green]")
+    console.print(f"[dim]Run with:[/dim] MOE_ATLAS_DB_PATH={out_db} moe-atlas dev")
 
 
 @cli.command()

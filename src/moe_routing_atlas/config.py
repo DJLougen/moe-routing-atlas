@@ -16,6 +16,7 @@ class AtlasConfig(BaseSettings):
         env_prefix="MOE_ATLAS_",
         env_file=".env",
         env_file_encoding="utf-8",
+        extra="ignore",
     )
 
     # Backend
@@ -23,14 +24,21 @@ class AtlasConfig(BaseSettings):
     backend_port: int = Field(default=8000, description="Backend server port")
     backend_url: str = Field(default="http://localhost:8000", description="Full backend URL")
     cors_origins: str = Field(
-        default="http://127.0.0.1:8000,http://localhost:8000",
+        default=(
+            "http://127.0.0.1:8000,http://localhost:8000,"
+            "http://127.0.0.1:8777,http://localhost:8777"
+        ),
         description="Comma-separated CORS origins",
     )
     max_list_limit: int = Field(default=500, description="Maximum traces list limit")
 
     # Database
     db_path: Path = Field(
-        default=Path.home() / ".moe-atlas" / "atlas.db",
+        default=(
+            Path(__file__).resolve().parents[2] / "qwen35b.db"
+            if (Path(__file__).resolve().parents[2] / "qwen35b.db").exists()
+            else Path.home() / ".moe-atlas" / "atlas.db"
+        ),
         description="SQLite database path",
     )
 
