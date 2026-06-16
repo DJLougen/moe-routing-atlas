@@ -59,6 +59,7 @@ class Trace(BaseModel):
         description="ISO 8601 timestamp",
     )
     model_name: str = Field(default="", description="Model name for display")
+    domain: str = Field(default="", description="Subject-domain label (set by the categorizer)")
     trace_id: int | None = Field(default=None, description="Backend-assigned trace ID")
 
     # Derived properties

@@ -53,6 +53,7 @@ moe-routing-atlas/
 │       ├── tracer.py            # Single-text tracing
 │       ├── batch_tracer.py      # Batch tracing
 │       ├── exporter.py          # Export/import utilities
+│       ├── categorizer.py       # Auto domain categorization
 │       └── visualizer/
 │           └── index.html       # Three.js 3D scene
 ├── tests/                       # Test suite
@@ -177,6 +178,10 @@ validated automatically.
 
 Traces are identified by their routing data (model + input tokens + expert activations), so
 re-tracing the same prompt never creates duplicates in the shared file.
+
+Optionally **categorize** traces by subject domain before sharing, so the set can be sliced by
+field — `moe-atlas categorize community.jsonl -o community.jsonl -e <chat-endpoint>` adds a
+`domain` label without touching routing data.
 
 ---
 

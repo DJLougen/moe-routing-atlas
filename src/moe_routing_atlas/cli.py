@@ -319,6 +319,75 @@ def config_show():
     console.print(table)
 
 
+@cli.command()
+@click.argument("input_file", required=False, type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(), help="Write tagged JSONL here (file mode)")
+@click.option(
+    "--db",
+    "use_db",
+    is_flag=True,
+    help="Categorize traces in the local database (adds a 'domain' column)",
+)
+@click.option(
+    "--endpoint",
+    "-e",
+    default=None,
+    help="OpenAI-compatible chat endpoint for the classifier LLM",
+)
+@click.option("--model", "-m", default=None, help="Model name passed to the endpoint")
+@click.option(
+    "--min-trace-id",
+    default=None,
+    type=int,
+    help="Only categorize traces with trace_id greater than this (db mode)",
+)
+@click.option("--batch-size", default=12, type=int, help="Texts per classification request")
+def categorize(input_file, output, use_db, endpoint, model, min_trace_id, batch_size):
+    """Auto-categorize traces into subject domains using an LLM endpoint.
+
+    File mode:  moe-atlas categorize traces.jsonl -o tagged.jsonl -e http://localhost:8899
+    DB mode:    moe-atlas categorize --db -e http://localhost:8899 [--min-trace-id N]
+
+    Each trace gains a ``domain`` label; routing data is never modified. The
+    endpoint may be any OpenAI-compatible chat server (set it with -e or the
+    MOE_ATLAS_CLASSIFIER_ENDPOINT environment variable).
+    """
+    from .categorizer import categorize_db, categorize_file, make_llm_classifier
+
+    config = get_config()
+    endpoint = endpoint or config.classifier_endpoint
+    if not endpoint:
+        raise click.UsageError(
+            "a classifier endpoint is required (use -e or set MOE_ATLAS_CLASSIFIER_ENDPOINT)"
+        )
+    classify_batch = make_llm_classifier(endpoint, model=model or config.classifier_model or None)
+
+    if use_db:
+        result = categorize_db(
+            config.db_path, classify_batch, batch_size=batch_size, min_trace_id=min_trace_id
+        )
+        console.print(
+            f"[green]Categorized {result.categorized}/{result.total} trace(s)[/green] "
+            f"[dim]in {config.db_path}[/dim]"
+        )
+    else:
+        if not input_file:
+            raise click.UsageError("provide an INPUT_FILE (or use --db)")
+        if not output:
+            raise click.UsageError("--output/-o is required in file mode")
+        result = categorize_file(input_file, output, classify_batch, batch_size=batch_size)
+        console.print(
+            f"[green]Categorized {result.categorized}/{result.total} trace(s) -> {output}[/green]"
+        )
+
+    table = Table(title="Domain distribution")
+    table.add_column("Domain", style="cyan")
+    table.add_column("Traces", justify="right", style="green")
+    for domain, count in sorted(result.distribution.items(), key=lambda kv: (-kv[1], kv[0])):
+        table.add_row(domain or "(none)", str(count))
+    console.print(table)
+
+
 # Entry point
 def main():
     """Main CLI entry point."""

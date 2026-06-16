@@ -15,11 +15,11 @@ MoE models (like Mixtral, Qwen-MoE, Gemma-4) use sparse routing: for each token,
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI](https://img.shields.io/badge/pip-moe--atlas-blue)](https://pypi.org/project/moe-atlas/)
-[![Release](https://img.shields.io/badge/release-v0.4.0-22c55e)](https://github.com/DJLougen/moe-routing-atlas/releases/latest)
+[![Release](https://img.shields.io/badge/release-v0.5.0-22c55e)](https://github.com/DJLougen/moe-routing-atlas/releases/latest)
 
 See which experts activate for each token, layer by layer, in an interactive 3D visualization.
 
-> **New in v0.4.0 — community trace files.** Routing traces are an *appendable* shared dataset. Pool contributors' files with `moe-atlas merge`, grow a canonical file with `moe-atlas export --append`, and gate pull requests with `moe-atlas validate` — all content-deduplicated and schema-validated so one bad file can't corrupt the set. See [Build a Community Trace Set](#build-a-community-trace-set).
+> **New in v0.5.0 — auto domain categorization.** Tag every trace with a subject domain (`moe-atlas categorize`) so you can slice routing by field and see which experts specialize where. Builds on the v0.4.0 [community trace files](#build-a-community-trace-set) — `merge`, `export --append`, and `validate`. See [Categorize Traces by Domain](#categorize-traces-by-domain).
 
 ---
 
@@ -213,6 +213,7 @@ moe-atlas --help
 | `import-traces` | Import traces from file | `moe-atlas import-traces traces.jsonl` |
 | `merge` | Combine trace files (deduplicated) | `moe-atlas merge a.jsonl b.jsonl -o all.jsonl` |
 | `validate` | Check a trace file before sharing | `moe-atlas validate traces.jsonl` |
+| `categorize` | Tag traces with subject domains | `moe-atlas categorize traces.jsonl -o tagged.jsonl -e URL` |
 | `init` | Create config directory | `moe-atlas init` |
 | `config-show` | Show current config | `moe-atlas config-show` |
 
@@ -345,6 +346,25 @@ moe-atlas validate community.jsonl
 
 Malformed or schema-invalid records are reported and skipped during a merge, so one bad
 contribution can never corrupt the shared file.
+
+### Categorize Traces by Domain
+
+Tag each trace with a subject domain so a shared set can be sliced by field — for example to
+see which experts specialize in biology vs. law. Categorization uses any OpenAI-compatible
+chat endpoint (a local llama.cpp / vLLM server, for example) and only *adds* a `domain`
+label; routing activations and the dedup fingerprint are never touched.
+
+```bash
+# Tag a trace file (writes a new JSONL with a `domain` field per record)
+moe-atlas categorize community.jsonl -o community_tagged.jsonl -e http://localhost:8899
+
+# Or backfill a `domain` column on the local database (optionally only new traces)
+moe-atlas categorize --db -e http://localhost:8899 --min-trace-id 2009
+```
+
+Set the endpoint once with `MOE_ATLAS_CLASSIFIER_ENDPOINT` instead of passing `-e`. Each text
+is classified into a coarse domain (Physics & Astronomy, Biology & Life Sciences, …) and the
+result is printed as a distribution table.
 
 ---
 
@@ -531,6 +551,7 @@ We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Near term:**
 - [x] `moe-atlas merge` command for combining trace files (with `export --append` and `validate`)
+- [x] Auto domain categorization (`moe-atlas categorize`) — tag traces by subject field
 - [ ] Real-time tracing (watch routing as model generates)
 - [ ] Expert usage heatmap overlay
 - [ ] Export visualization as PNG/MP4

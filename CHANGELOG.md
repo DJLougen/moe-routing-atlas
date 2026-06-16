@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-16
+
+### Added
+- **Auto domain categorization.** Tag every trace with a subject domain so routing data can be sliced by field — making it easy to study which experts specialize where:
+  - `moe-atlas categorize traces.jsonl -o tagged.jsonl -e ENDPOINT` adds a `domain` label to each record in a trace file.
+  - `moe-atlas categorize --db -e ENDPOINT [--min-trace-id N]` adds and populates a `domain` column on the local database, optionally scoped to only newly added traces.
+  - New `categorizer` module — `make_llm_classifier`, `classify_texts`, `categorize_records`, `categorize_file`, `categorize_db`, `normalize_label`, and a coarse 15-entry `DEFAULT_TAXONOMY`. The classifier is any OpenAI-compatible chat endpoint (configurable via `-e` or `MOE_ATLAS_CLASSIFIER_ENDPOINT`) and is injectable, so the library and its tests never require a live model.
+  - `Trace.domain` field; exported and imported traces now carry their domain label.
+- Categorization only *adds* labels — activation counts and gate weights are never read or modified, and the routing fingerprint (the dedup key) is unaffected.
+
 ## [0.4.0] - 2026-06-16
 
 ### Added
@@ -79,7 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Three.js 3D visualizer
 - Batch and single-text tracers for HuggingFace MoE models
 
-[Unreleased]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/DJLougen/moe-routing-atlas/compare/v0.2.0...v0.2.1

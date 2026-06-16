@@ -68,6 +68,12 @@ class AtlasConfig(BaseSettings):
         description="Directory for exported traces",
     )
 
+    # Classifier (auto domain categorization)
+    classifier_endpoint: str = Field(
+        default="", description="OpenAI-compatible chat endpoint for auto categorization"
+    )
+    classifier_model: str = Field(default="", description="Model name for the categorizer endpoint")
+
     # Visualization
     visualizer_theme: str = Field(
         default="dark",

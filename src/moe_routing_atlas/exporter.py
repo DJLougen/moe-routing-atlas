@@ -37,6 +37,7 @@ def _db_row_to_trace_payload(row: dict, activations: list[dict]) -> dict:
         "token_strs": token_strs,
         "activations": activations,
         "timestamp": row.get("timestamp"),
+        "domain": row.get("domain") or "",
     }
     return payload
 
