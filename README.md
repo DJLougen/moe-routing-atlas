@@ -54,24 +54,23 @@ Every visual element is tied to **actual routing data** — nothing is decorativ
 
 ### Main Visualization
 
-*Interactive 3D scene showing 24 layers of expert routing. Click any token to see its path.*
+![Main Visualization](docs/screenshots/viz-animation.gif)
+*Live 3D scene: 120 layers of Qwen3.5/3.6-35B-A3B expert routing, 256 experts top-8 per MoE layer. Click any token to trace its path; auto-play sweeps the sequence.*
 
 ### Token Routing Detail
 
 ![Token Routing](docs/screenshots/viz-token-detail.png)
 *A single token's routing through all layers. Orange = active experts, cyan = routers, green = cross-layer flow.*
 
-### Animation Playback
+### Search & Filter Traces
 
-![Animation Playback](docs/screenshots/viz-animation.png)
-*Auto-play through tokens to see how routing evolves across the sequence.*
+![Search and Filter](docs/screenshots/viz-animation.png)
+*Search prompt text, token, or ID and filter by model (Qwen 3.5 / 3.6). Traces group into collapsible sections with live hover previews.*
 
 ### Trace Gallery
 
 ![Trace Gallery](docs/screenshots/viz-traces.png)
-*Load and compare multiple traces side-by-side.*
-
-> **Note:** Screenshots above are placeholders. Run the visualizer and take your own — the scene is fully interactive. See [Taking Screenshots](#taking-screenshots) below.
+*Browse and load any of the 2,000+ captured traces from the grouped, searchable gallery.*
 
 ---
 
